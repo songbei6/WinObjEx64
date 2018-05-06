@@ -13,14 +13,29 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="ldasm">
-      <UniqueIdentifier>{ebbe4f4f-0990-4d15-beda-0af23ffbb97e}</UniqueIdentifier>
-    </Filter>
     <Filter Include="minirtl">
       <UniqueIdentifier>{1f87af63-dc0b-4a32-88ee-e9e15a1041c8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="ldr">
-      <UniqueIdentifier>{26b58504-6440-41a5-9f49-307f33ed8630}</UniqueIdentifier>
+    <Filter Include="hde">
+      <UniqueIdentifier>{b8b6096c-f90d-41f3-a643-a53ee0fae82b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{495dbe60-1cd4-44e0-a57a-5820605391e9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\extras">
+      <UniqueIdentifier>{c4d4503d-e084-480d-b91b-12d806d3b53d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\extras">
+      <UniqueIdentifier>{3dd02ac9-71cb-4104-baba-dee9bd04a2cc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\props">
+      <UniqueIdentifier>{cb4d8330-830a-457c-9f73-0d59de70caa2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\props">
+      <UniqueIdentifier>{cab45665-92a9-4c9f-b47c-a1a940fb17c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ntos">
+      <UniqueIdentifier>{621f3500-b7f1-418f-8901-7eff2d8c3a2d}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -28,18 +43,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="excepth.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="extras.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="extrasPipes.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="extrasPN.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="extrasUSD.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="findDlg.c">
@@ -57,38 +60,11 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="propBasic.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="propDesktop.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="propDlg.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="propDriver.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="propObjectDump.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="propProcess.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="propSecurity.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="propType.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="sup.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="treelist.c">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ldasm\ldasm.c">
-      <Filter>ldasm</Filter>
     </ClCompile>
     <ClCompile Include="minirtl\_strcat.c">
       <Filter>minirtl</Filter>
@@ -159,17 +135,59 @@
     <ClCompile Include="minirtl\ultostr.c">
       <Filter>minirtl</Filter>
     </ClCompile>
-    <ClCompile Include="extrasSSDT.c">
+    <ClCompile Include="hde\hde64.c">
+      <Filter>hde</Filter>
+    </ClCompile>
+    <ClCompile Include="objects.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="testunit.c">
+    <ClCompile Include="extapi.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ldr\ldr.c">
-      <Filter>ldr</Filter>
+    <ClCompile Include="tests\testunit.c">
+      <Filter>tests</Filter>
     </ClCompile>
-    <ClCompile Include="extrasDrivers.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="extras\extras.c">
+      <Filter>Source Files\extras</Filter>
+    </ClCompile>
+    <ClCompile Include="extras\extrasDrivers.c">
+      <Filter>Source Files\extras</Filter>
+    </ClCompile>
+    <ClCompile Include="extras\extrasPN.c">
+      <Filter>Source Files\extras</Filter>
+    </ClCompile>
+    <ClCompile Include="extras\extrasSSDT.c">
+      <Filter>Source Files\extras</Filter>
+    </ClCompile>
+    <ClCompile Include="extras\extrasUSD.c">
+      <Filter>Source Files\extras</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propBasic.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propDesktop.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propDlg.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propDriver.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propObjectDump.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propProcess.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propSecurity.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="props\propType.c">
+      <Filter>Source Files\props</Filter>
+    </ClCompile>
+    <ClCompile Include="extras\extrasIPC.c">
+      <Filter>Source Files\extras</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -182,18 +200,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="excepth.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="extras.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="extrasPipes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="extrasPN.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="extrasUSD.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="findDlg.h">
@@ -211,45 +217,6 @@
     <ClInclude Include="list.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ntos.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propBasic.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propBasicConsts.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propDesktop.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propDlg.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propDriver.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propDriverConsts.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propObjectDump.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propObjectDumpConsts.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propProcess.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propSecurity.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propSecurityConsts.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="propType.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -259,14 +226,8 @@
     <ClInclude Include="supConsts.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="treelist.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ui.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ldasm\ldasm.h">
-      <Filter>ldasm</Filter>
     </ClInclude>
     <ClInclude Include="minirtl\minirtl.h">
       <Filter>Header Files</Filter>
@@ -274,20 +235,86 @@
     <ClInclude Include="minirtl\rtltypes.h">
       <Filter>minirtl</Filter>
     </ClInclude>
-    <ClInclude Include="extrasSSDT.h">
+    <ClInclude Include="hde\hde64.h">
+      <Filter>hde</Filter>
+    </ClInclude>
+    <ClInclude Include="hde\table64.h">
+      <Filter>hde</Filter>
+    </ClInclude>
+    <ClInclude Include="hde\pstdint.h">
+      <Filter>hde</Filter>
+    </ClInclude>
+    <ClInclude Include="objects.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="testunit.h">
+    <ClInclude Include="extapi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="propTypeConsts.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="tests\testunit.h">
+      <Filter>tests</Filter>
     </ClInclude>
-    <ClInclude Include="ldr\ldr.h">
-      <Filter>ldr</Filter>
+    <ClInclude Include="extras\extras.h">
+      <Filter>Header Files\extras</Filter>
     </ClInclude>
-    <ClInclude Include="extrasDrivers.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="extras\extrasDrivers.h">
+      <Filter>Header Files\extras</Filter>
+    </ClInclude>
+    <ClInclude Include="extras\extrasPN.h">
+      <Filter>Header Files\extras</Filter>
+    </ClInclude>
+    <ClInclude Include="extras\extrasSSDT.h">
+      <Filter>Header Files\extras</Filter>
+    </ClInclude>
+    <ClInclude Include="extras\extrasUSD.h">
+      <Filter>Header Files\extras</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propBasic.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propBasicConsts.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propDesktop.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propDlg.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propDriver.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propDriverConsts.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propObjectDump.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propObjectDumpConsts.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propProcess.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propSecurity.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propSecurityConsts.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propType.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="props\propTypeConsts.h">
+      <Filter>Header Files\props</Filter>
+    </ClInclude>
+    <ClInclude Include="ntos\ntos.h">
+      <Filter>ntos</Filter>
+    </ClInclude>
+    <ClInclude Include="extras\extrasIPC.h">
+      <Filter>Header Files\extras</Filter>
+    </ClInclude>
+    <ClInclude Include="ntos\ntalpc.h">
+      <Filter>ntos</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -444,19 +471,17 @@
     <Image Include="rsrc\147.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="rsrc\148.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-    <Image Include="rsrc\149.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
     <Image Include="rsrc\Bitmap_125.bmp">
       <Filter>Resource Files</Filter>
     </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="rsrc\kldbgdrv.sys">
+    <Image Include="rsrc\icon1.ico">
       <Filter>Resource Files</Filter>
-    </None>
+    </Image>
+    <Image Include="rsrc\148.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="rsrc\mailslot.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

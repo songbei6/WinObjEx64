@@ -1,5 +1,21 @@
-v 1.4.1
-some cleanup, rtls update
+v1.5.3
+OpenWindowStation fix
+
+v1.5.2
+internal rearrange
+
+v1.5.1
+bugfixes
+
+v1.5.0
+added Partition, DxgkCurrentDxgProcessObject objects description
+added mailslots viewer dialog
+added file properties for drivers (menu -> extras -> Drivers)
+added FltConnectionPort object dump
+switched to hde instead of ldasm
+fixed Wine behavior along with some bugs
+rtls updated, switched to VS2015 U3
+note: Windows 10 RS2 (15063), RS1 (14393) supported as well as TH1(10240)/TH2(10586), RS3 supported (16288+ build)
 
 v 1.4.0
 drivers list and dump (menu -> extras)
@@ -22,3 +38,6 @@ added descriptions for more object types
 added named pipes dialog (menu -> extras) 
 added information for IoCompletion object type, including structured object body dump2 
 some code revision and corrections 
+
+v 1.0.0 (Feb 23, 2015)
+initial release

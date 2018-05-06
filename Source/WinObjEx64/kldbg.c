@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2015 - 2016
+*  (C) COPYRIGHT AUTHORS, 2015 - 2018
 *
 *  TITLE:       KLDBG.C, based on KDSubmarine by Evilcry
 *
-*  VERSION:     1.41
+*  VERSION:     1.52
 *
-*  DATE:        01 Mar 2016 
+*  DATE:        08 Jan 2018
 *
 *  MINIMUM SUPPORTED OS WINDOWS 7
 *
@@ -17,14 +17,14 @@
 *
 *******************************************************************************/
 #include "global.h"
-#include "ldasm\ldasm.h"
+#include "hde\hde64.h"
 
 //number of buckets in the object directory
 #define NUMBEROFBUCKETS 0x25
 
 //ObpLookupNamespaceEntry signatures
 
-BYTE NamespacePattern[] =  { 0x0F, 0xB6, 0x7A, 0x28, 0x48, 0x8D, 0x05 }; // 7600, 7601, 9600, 10240
+BYTE NamespacePattern[] = { 0x0F, 0xB6, 0x7A, 0x28, 0x48, 0x8D, 0x05 }; // 7600, 7601, 9600, 10240
 BYTE NamespacePattern8[] = { 0x0F, 0xB6, 0x79, 0x28, 0x48, 0x8D, 0x05 }; // 9200 (8 failed even here)
 
 //KiSystemServiceStartPattern signature
@@ -54,33 +54,33 @@ BYTE  KiSystemServiceStartPattern[] = { 0x8B, 0xF8, 0xC1, 0xEF, 0x07, 0x83, 0xE7
 *
 */
 BYTE ObGetObjectHeaderOffset(
-	BYTE InfoMask, 
-	OBJ_HEADER_INFO_FLAG Flag
-	)
+    _In_ BYTE InfoMask,
+    _In_ OBJ_HEADER_INFO_FLAG Flag
+)
 {
-	BYTE OffsetMask, HeaderOffset = 0;
+    BYTE OffsetMask, HeaderOffset = 0;
 
-	if ((InfoMask & Flag) == 0)
-		return 0;
+    if ((InfoMask & Flag) == 0)
+        return 0;
 
-	OffsetMask = InfoMask & (Flag | (Flag - 1));
+    OffsetMask = InfoMask & (Flag | (Flag - 1));
 
-	if ((OffsetMask & HeaderCreatorInfoFlag) != 0)
-		HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_CREATOR_INFO);
+    if ((OffsetMask & HeaderCreatorInfoFlag) != 0)
+        HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_CREATOR_INFO);
 
-	if ((OffsetMask & HeaderNameInfoFlag) != 0)
-		HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_NAME_INFO);
+    if ((OffsetMask & HeaderNameInfoFlag) != 0)
+        HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_NAME_INFO);
 
-	if ((OffsetMask & HeaderHandleInfoFlag) != 0)
-		HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_HANDLE_INFO);
+    if ((OffsetMask & HeaderHandleInfoFlag) != 0)
+        HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_HANDLE_INFO);
 
-	if ((OffsetMask & HeaderQuotaInfoFlag) != 0)
-		HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_QUOTA_INFO);
+    if ((OffsetMask & HeaderQuotaInfoFlag) != 0)
+        HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_QUOTA_INFO);
 
-	if ((OffsetMask & HeaderProcessInfoFlag) != 0)
-		HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_PROCESS_INFO);
+    if ((OffsetMask & HeaderProcessInfoFlag) != 0)
+        HeaderOffset += (BYTE)sizeof(OBJECT_HEADER_PROCESS_INFO);
 
-	return HeaderOffset;
+    return HeaderOffset;
 }
 
 /*
@@ -92,31 +92,31 @@ BYTE ObGetObjectHeaderOffset(
 *
 */
 BOOL ObHeaderToNameInfoAddress(
-	_In_ UCHAR ObjectInfoMask, 
-	_In_ ULONG_PTR ObjectAddress,
-	_Inout_ PULONG_PTR HeaderAddress,
-	_In_ OBJ_HEADER_INFO_FLAG InfoFlag
-	)
+    _In_ UCHAR ObjectInfoMask,
+    _In_ ULONG_PTR ObjectAddress,
+    _Inout_ PULONG_PTR HeaderAddress,
+    _In_ OBJ_HEADER_INFO_FLAG InfoFlag
+)
 {
-	BYTE      HeaderOffset;
-	ULONG_PTR Address;
-	
-	if (HeaderAddress == NULL)
-		return FALSE;
+    BYTE      HeaderOffset;
+    ULONG_PTR Address;
 
-	if (ObjectAddress < g_kdctx.SystemRangeStart)
-		return FALSE;
+    if (HeaderAddress == NULL)
+        return FALSE;
 
-	HeaderOffset = ObGetObjectHeaderOffset(ObjectInfoMask, InfoFlag);
-	if (HeaderOffset == 0)
-		return FALSE;
+    if (ObjectAddress < g_kdctx.SystemRangeStart)
+        return FALSE;
 
-	Address = ObjectAddress - HeaderOffset;
-	if (Address < g_kdctx.SystemRangeStart)
-		return FALSE;
-	
-	*HeaderAddress = Address;
-	return TRUE;
+    HeaderOffset = ObGetObjectHeaderOffset(ObjectInfoMask, InfoFlag);
+    if (HeaderOffset == 0)
+        return FALSE;
+
+    Address = ObjectAddress - HeaderOffset;
+    if (Address < g_kdctx.SystemRangeStart)
+        return FALSE;
+
+    *HeaderAddress = Address;
+    return TRUE;
 }
 
 /*
@@ -124,7 +124,7 @@ BOOL ObHeaderToNameInfoAddress(
 *
 * Purpose:
 *
-* Decode encoded type index bjects
+* Decode object TypeIndex, encoding introduced in win10
 *
 * Limitation:
 *
@@ -132,20 +132,20 @@ BOOL ObHeaderToNameInfoAddress(
 *
 */
 UCHAR ObDecodeTypeIndex(
-	_In_ PVOID Object,
-	_In_ UCHAR EncodedTypeIndex
-	)
+    _In_ PVOID Object,
+    _In_ UCHAR EncodedTypeIndex
+)
 {
-	UCHAR          TypeIndex;
-	POBJECT_HEADER ObjectHeader;
+    UCHAR          TypeIndex;
+    POBJECT_HEADER ObjectHeader;
 
-	if (g_kdctx.ObHeaderCookie == 0) {
-		return EncodedTypeIndex;
-	}
+    if (g_kdctx.ObHeaderCookie == 0) {
+        return EncodedTypeIndex;
+    }
 
-	ObjectHeader = OBJECT_TO_OBJECT_HEADER(Object);
-	TypeIndex = (EncodedTypeIndex ^ (UCHAR)((ULONG_PTR)ObjectHeader >> OBJECT_SHIFT) ^ g_kdctx.ObHeaderCookie);
-	return TypeIndex;
+    ObjectHeader = OBJECT_TO_OBJECT_HEADER(Object);
+    TypeIndex = (EncodedTypeIndex ^ (UCHAR)((ULONG_PTR)ObjectHeader >> OBJECT_SHIFT) ^ g_kdctx.ObHeaderCookie);
+    return TypeIndex;
 }
 
 /*
@@ -161,63 +161,67 @@ UCHAR ObDecodeTypeIndex(
 *
 */
 UCHAR ObFindHeaderCookie(
-	_In_ PKLDBGCONTEXT Context,
-	_In_ ULONG_PTR MappedImageBase,
-	_In_ ULONG_PTR KernelImageBase
-	)
+    _In_ PKLDBGCONTEXT Context,
+    _In_ ULONG_PTR MappedImageBase,
+    _In_ ULONG_PTR KernelImageBase
+)
 {
-	BOOL      cond = FALSE;
-	UCHAR     ObHeaderCookie = 0;
-	ULONG_PTR Address = 0, KmAddress;
+    BOOL       cond = FALSE;
+    UCHAR      ObHeaderCookie = 0;
+    ULONG_PTR  Address = 0, KmAddress;
+    UINT       c;
+    LONG       rel = 0;
+    hde64s     hs;
 
-	UINT        c;
-	LONG         rel = 0;
-	ldasm_data	 ld;
+    if (Context == NULL)
+        return 0;
 
-	if (Context == NULL)
-		return 0;
+    __try {
 
-	__try {
+        do {
 
-		do {
+            Address = (ULONG_PTR)GetProcAddress((PVOID)MappedImageBase, "ObGetObjectType");
+            if (Address == 0) {
+                break;
+            }
 
-			Address = (ULONG_PTR)GetProcAddress((PVOID)MappedImageBase, "ObGetObjectType");
-			if (Address == 0) {
-				break;
-			}
+            c = 0;
+            RtlSecureZeroMemory(&hs, sizeof(hs));
+            do {
+                //movzx   ecx, byte ptr cs:ObHeaderCookie
+                if ((*(PBYTE)(Address + c) == 0x0f) &&
+                    (*(PBYTE)(Address + c + 1) == 0xb6) &&
+                    (*(PBYTE)(Address + c + 2) == 0x0d))
+                {
+                    rel = *(PLONG)(Address + c + 3);
+                    break;
+                }
 
-			c = 0;
-			do {
-				//movzx   ecx, byte ptr cs:ObHeaderCookie
-				if ((*(PBYTE)(Address + c) == 0x0f) &&
-					(*(PBYTE)(Address + c + 1) == 0xb6) &&
-					(*(PBYTE)(Address + c + 2) == 0x0d))
-				{
-					rel = *(PLONG)(Address + c + 3);
-					break;
-				}
-				c += ldasm((void*)(Address + c), &ld, 1);
-			} while (c < 256);
-			KmAddress = Address + c + 7 + rel;
+                hde64_disasm((void*)(Address + c), &hs);
+                if (hs.flags & F_ERROR)
+                    break;
+                c += hs.len;
 
-			KmAddress = KernelImageBase + KmAddress - MappedImageBase;
+            } while (c < 256);
+            KmAddress = Address + c + 7 + rel;
 
-			if (KmAddress < Context->SystemRangeStart) {
-				break;
-			}
+            KmAddress = KernelImageBase + KmAddress - MappedImageBase;
 
-			if (!kdReadSystemMemory(KmAddress, &ObHeaderCookie, sizeof(ObHeaderCookie))) {
-				break;
-			}
+            if (!kdAddressInNtOsImage((PVOID)KmAddress))
+                break;
 
-		} while (cond);
+            if (!kdReadSystemMemory(KmAddress, &ObHeaderCookie, sizeof(ObHeaderCookie))) {
+                break;
+            }
 
-	}
-	__except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
-		return 0;
-	}
+        } while (cond);
 
-	return ObHeaderCookie;
+    }
+    __except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
+        return 0;
+    }
+
+    return ObHeaderCookie;
 }
 
 /*
@@ -233,100 +237,95 @@ UCHAR ObFindHeaderCookie(
 *
 */
 PVOID ObFindObpPrivateNamespaceLookupTable(
-	_In_ PKLDBGCONTEXT Context,
-	_In_ ULONG_PTR MappedImageBase,
-	_In_ ULONG MappedImageSize,
-	_In_ ULONG_PTR KernelImageBase
-	)
+    _In_ ULONG_PTR MappedImageBase,
+    _In_ ULONG MappedImageSize,
+    _In_ ULONG_PTR KernelImageBase
+)
 {
-	BOOL       cond = FALSE, bFound;
-	ULONG      c;
-	PBYTE      Signature;
-	ULONG      SignatureSize;
+    BOOL       cond = FALSE, bFound;
+    ULONG      c;
+    PBYTE      Signature;
+    ULONG      SignatureSize;
 
-	LONG       rel = 0;
-	ULONG_PTR  Address = 0L;
-	ldasm_data ld;
+    LONG       rel = 0;
+    ULONG_PTR  Address = 0L;
+    hde64s     hs;
 
-	__try {
+    __try {
 
-		if (
-			(MappedImageBase == 0) ||
-			(Context == NULL) ||
-			(MappedImageSize == 0) ||
-			(KernelImageBase == 0)
-			)
-		{ 
-			return 0;
-		}
+        do {
 
-		do {
+            switch (g_WinObj.osver.dwBuildNumber) {
 
-			switch (Context->osver.dwBuildNumber) {
+            case 9200:
+                Signature = NamespacePattern8;
+                SignatureSize = sizeof(NamespacePattern8);
+                break;
 
-			case 9200:
-				Signature = NamespacePattern8;
-				SignatureSize = sizeof(NamespacePattern8);
-				break;
+            default:
+                Signature = NamespacePattern;
+                SignatureSize = sizeof(NamespacePattern);
+                break;
+            }
 
-			default:
-				Signature = NamespacePattern;
-				SignatureSize = sizeof(NamespacePattern);
-				break;
-			}
+            bFound = FALSE;
 
-			bFound = FALSE;
+            for (c = 0; c < MappedImageSize - SignatureSize; c++) {
 
-			for (c = 0; c < MappedImageSize - SignatureSize; c++) {
+                //find signature
+                if (RtlCompareMemory(
+                    ((PBYTE)MappedImageBase + c),
+                    Signature, SignatureSize) == SignatureSize)
+                {
+                    bFound = TRUE;
+                    break;
+                }
+            }
 
-				//find signature
-				if (RtlCompareMemory(
-					((PBYTE)MappedImageBase + c),
-					Signature, SignatureSize) == SignatureSize)
-				{
-					bFound = TRUE;
-					break;
-				}
-			}
+            //signature not found
+            if (bFound == FALSE) {
+                return 0;
+            }
 
-			//signature not found
-			if (bFound == FALSE) {
-				Address = 0;
-				return 0;
-			}
+            //set new scan position, signature contain next level search pattern, do not skip
+            Address = MappedImageBase + c;
+            c = 0;
 
-			//set new scan position, signature contain next level search pattern, do not skip
-			Address = MappedImageBase + c;
-			c = 0;
+            RtlSecureZeroMemory(&hs, sizeof(hs));
 
-			do {
-				//lea rax, ObpPrivateNamespaceLookupTable
-				if ((*(PBYTE)(Address + c) == 0x48) &&
-					(*(PBYTE)(Address + c + 1) == 0x8d) &&
-					(*(PBYTE)(Address + c + 2) == 0x05))
-				{
-					rel = *(PLONG)(Address + c + 3);
-					break;
-				}
-				c += ldasm((void*)(Address + c), &ld, 1);
-			} while (c < 128);
+            do {
+                //lea rax, ObpPrivateNamespaceLookupTable
+                if ((*(PBYTE)(Address + c) == 0x48) &&
+                    (*(PBYTE)(Address + c + 1) == 0x8d) &&
+                    (*(PBYTE)(Address + c + 2) == 0x05))
+                {
+                    rel = *(PLONG)(Address + c + 3);
+                    break;
+                }
 
-			Address = Address + c + 7 + rel;
-			Address = KernelImageBase + Address - MappedImageBase;
+                hde64_disasm((void*)(Address + c), &hs);
+                if (hs.flags & F_ERROR)
+                    break;
+                c += hs.len;
 
-			if (Address < g_kdctx.SystemRangeStart) {
-				Address = 0;
-				break;
-			}
+            } while (c < 128);
 
-		} while (cond);
+            Address = Address + c + 7 + rel;
+            Address = KernelImageBase + Address - MappedImageBase;
 
-	}
-	__except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
-		return 0;
-	}
+            if (Address < g_kdctx.SystemRangeStart) {
+                Address = 0;
+                break;
+            }
 
-	return (PVOID)Address;
+        } while (cond);
+
+    }
+    __except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
+        return 0;
+    }
+
+    return (PVOID)Address;
 }
 
 /*
@@ -338,122 +337,123 @@ PVOID ObFindObpPrivateNamespaceLookupTable(
 *
 */
 VOID kdFindKiServiceTable(
-	_In_ ULONG_PTR MappedImageBase,
-	_In_ ULONG MappedImageSize,
-	_In_ ULONG_PTR KernelImageBase,
-	_Inout_ ULONG_PTR *KiServiceTablePtr,
-	_Inout_ ULONG *KiServiceLimit
-	)
+    _In_ ULONG_PTR MappedImageBase,
+    _In_ ULONG_PTR KernelImageBase,
+    _Inout_ ULONG_PTR *KiServiceTablePtr,
+    _Inout_ ULONG *KiServiceLimit
+)
 {
+    BOOL         cond = FALSE, bFound = FALSE;
+    UINT         c, SignatureSize;
+    LONG         rel = 0;
+    ULONG        i, SectionSize;
+    ULONG_PTR    Address = 0, SectionBase = 0;
+    hde64s       hs;
 
-	BOOL         cond = FALSE, bFound = FALSE;
-	UINT         c, SignatureSize;
-	LONG         rel = 0;
-	ULONG_PTR    Address = 0;
-	ldasm_data	 ld;
+    PIMAGE_NT_HEADERS NtHeaders;
+    IMAGE_SECTION_HEADER *SectionTableEntry;
 
-	KSERVICE_TABLE_DESCRIPTOR KeSystemDescriptorTable;
+    KSERVICE_TABLE_DESCRIPTOR KeSystemDescriptorTable;
 
-	if (
-		(KiServiceLimit == NULL) ||
-		(KiServiceTablePtr == NULL) ||
-		(MappedImageSize == 0) ||
-		(MappedImageBase == 0) ||
-		(KernelImageBase == 0)
-		)
-	{
-		return;
-	}
+    __try {
 
-	__try {
+        do {
 
-		do {
+            NtHeaders = RtlImageNtHeader((PVOID)MappedImageBase);
+            if (NtHeaders == NULL)
+                break;
 
-			SignatureSize = sizeof(KiSystemServiceStartPattern);
+            SectionTableEntry = (PIMAGE_SECTION_HEADER)((PCHAR)NtHeaders +
+                sizeof(ULONG) +
+                sizeof(IMAGE_FILE_HEADER) +
+                NtHeaders->FileHeader.SizeOfOptionalHeader);
 
-			for (c = 0; c < MappedImageSize - SignatureSize; c++) {
+            SectionBase = 0;
+            SectionSize = 0;
 
-				//find  KiSystemServiceStart signature 
-				if (RtlCompareMemory(
-					((PBYTE)MappedImageBase + c),
-					KiSystemServiceStartPattern, SignatureSize) == SignatureSize)
-				{
-					bFound = TRUE;
-					break;
-				}
-			}
+            i = NtHeaders->FileHeader.NumberOfSections;
+            while (i > 0) {
+                if (*(PULONG)SectionTableEntry->Name == 'xet.')
+                    if ((SectionTableEntry->Name[4] == 't') &&
+                        (SectionTableEntry->Name[5] == 0))
+                    {
+                        SectionBase = ((ULONG_PTR)MappedImageBase + SectionTableEntry->VirtualAddress);
+                        SectionSize = SectionTableEntry->Misc.VirtualSize;
+                        break;
+                    }
+                i -= 1;
+                SectionTableEntry += 1;
+            }
 
-			if (bFound == FALSE)
-				break;
+            if ((SectionBase == 0) || (SectionSize == 0))
+                break;
 
-			//set new scan position, next level search pattern not included, skip
-			Address = MappedImageBase + c + SignatureSize;
-			c = 0;
+            SignatureSize = sizeof(KiSystemServiceStartPattern);
+            if (SignatureSize > SectionSize)
+                break;
 
-			do {
-				//lea r10, KeServiceDescriptorTable
-				if ((*(PBYTE)(Address + c) == 0x4c) &&
-					(*(PBYTE)(Address + c + 1) == 0x8d) &&
-					(*(PBYTE)(Address + c + 2) == 0x15))
-				{
-					rel = *(PLONG)(Address + c + 3);
-					break;
-				}
-				c += ldasm((void*)(Address + c), &ld, 1);
-			} while (c < 128);
+            for (c = 0; c < SectionSize - SignatureSize; c++) {
 
-			Address = Address + c + 7 + rel;
-			Address = KernelImageBase + Address - MappedImageBase;
+                //find  KiSystemServiceStart signature 
+                if (RtlCompareMemory(
+                    ((PBYTE)SectionBase + c),
+                    KiSystemServiceStartPattern, SignatureSize) == SignatureSize)
+                {
+                    bFound = TRUE;
+                    break;
+                }
+            }
 
-			if (Address < g_kdctx.SystemRangeStart)
-				break;
+            if (bFound == FALSE)
+                break;
 
-			RtlSecureZeroMemory(&KeSystemDescriptorTable,
-				sizeof(KeSystemDescriptorTable));
+            //set new scan position, next level search pattern not included, skip
+            Address = SectionBase + c + SignatureSize;
+            c = 0;
+            RtlSecureZeroMemory(&hs, sizeof(hs));
 
-			if (!kdReadSystemMemory(Address,
-				&KeSystemDescriptorTable, sizeof(KeSystemDescriptorTable)))
-			{
-				break;
-			}
+            do {
+                //lea r10, KeServiceDescriptorTable
+                if ((*(PBYTE)(Address + c) == 0x4c) &&
+                    (*(PBYTE)(Address + c + 1) == 0x8d) &&
+                    (*(PBYTE)(Address + c + 2) == 0x15))
+                {
+                    rel = *(PLONG)(Address + c + 3);
+                    break;
+                }
 
-			*KiServiceLimit = KeSystemDescriptorTable.Limit;
-			*KiServiceTablePtr = KeSystemDescriptorTable.Base;
+                hde64_disasm((void*)(Address + c), &hs);
+                if (hs.flags & F_ERROR)
+                    break;
+                c += hs.len;
 
-		} while (cond);
+            } while (c < 128);
 
-	}
-	__except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
-		return;
-	}
-	return;
-}
+            Address = Address + c + 7 + rel;
+            Address = KernelImageBase + Address - MappedImageBase;
 
-/*
-* ObQuerySystemRangeStartValue
-*
-* Purpose:
-*
-* Read MmSystemRangeStart from kernel memory
-*
-*/
-ULONG_PTR ObQuerySystemRangeStartValue(
-	_In_ ULONG_PTR MappedImageBase,
-	_In_ ULONG_PTR KernelImageBase
-	)
-{
-	ULONG_PTR KmAddress, Value = 0;
+            if (!kdAddressInNtOsImage((PVOID)Address))
+                break;
 
-	if ((MappedImageBase == 0) || (KernelImageBase == 0))
-		return 0;
+            RtlSecureZeroMemory(&KeSystemDescriptorTable,
+                sizeof(KeSystemDescriptorTable));
 
-	KmAddress = (ULONG_PTR)GetProcAddress((HMODULE)MappedImageBase, "MmSystemRangeStart");
-	if (KmAddress == 0) {
-		return 0;
-	}
-	KmAddress = KernelImageBase + KmAddress - MappedImageBase;
-	kdReadSystemMemory(KmAddress, &Value, sizeof(ULONG_PTR));
-	return Value;
+            if (!kdReadSystemMemory(Address,
+                &KeSystemDescriptorTable, sizeof(KeSystemDescriptorTable)))
+            {
+                break;
+            }
+
+            *KiServiceLimit = KeSystemDescriptorTable.Limit;
+            *KiServiceTablePtr = KeSystemDescriptorTable.Base;
+
+        } while (cond);
+
+    }
+    __except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
+        return;
+    }
+    return;
 }
 
 /*
@@ -461,42 +461,42 @@ ULONG_PTR ObQuerySystemRangeStartValue(
 *
 * Purpose:
 *
-* Obtain directory object kernel address by opening directory by name 
+* Obtain directory object kernel address by opening directory by name
 * and quering resulted handle in NtQuerySystemInformation(SystemHandleInformation) handle dump
 *
 */
 BOOL ObGetDirectoryObjectAddress(
-	_In_opt_ LPWSTR lpDirectory,
-	_Inout_ PULONG_PTR lpRootAddress,
-	_Inout_opt_ PUCHAR lpTypeIndex
-	)
+    _In_opt_ LPWSTR lpDirectory,
+    _Inout_ PULONG_PTR lpRootAddress,
+    _Inout_opt_ PUSHORT lpTypeIndex
+)
 {
-	BOOL                bFound = FALSE;
-	HANDLE              hDirectory = NULL;
-	NTSTATUS            status;
-	LPWSTR              lpTarget;
-	OBJECT_ATTRIBUTES   objattr;
-	UNICODE_STRING      objname;
+    BOOL                bFound = FALSE;
+    HANDLE              hDirectory = NULL;
+    NTSTATUS            status;
+    LPWSTR              lpTarget;
+    OBJECT_ATTRIBUTES   objattr;
+    UNICODE_STRING      objname;
 
-	if (lpRootAddress == NULL)
-		return bFound;
+    if (lpRootAddress == NULL)
+        return bFound;
 
-	if (lpDirectory == NULL) {
-		lpTarget = L"\\";
-	}
-	else {
-		lpTarget = lpDirectory;
-	}
-	RtlSecureZeroMemory(&objname, sizeof(objname));
-	RtlInitUnicodeString(&objname, lpTarget);
-	InitializeObjectAttributes(&objattr, &objname, OBJ_CASE_INSENSITIVE, NULL, NULL);
-	status = NtOpenDirectoryObject(&hDirectory, DIRECTORY_QUERY, &objattr);
-	if (!NT_SUCCESS(status))
-		return bFound;
-	
-	bFound = supQueryObjectFromHandle(hDirectory, lpRootAddress, lpTypeIndex);
-	NtClose(hDirectory);
-	return bFound;
+    if (lpDirectory == NULL) {
+        lpTarget = L"\\";
+    }
+    else {
+        lpTarget = lpDirectory;
+    }
+    RtlSecureZeroMemory(&objname, sizeof(objname));
+    RtlInitUnicodeString(&objname, lpTarget);
+    InitializeObjectAttributes(&objattr, &objname, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    status = NtOpenDirectoryObject(&hDirectory, DIRECTORY_QUERY, &objattr);
+    if (!NT_SUCCESS(status))
+        return bFound;
+
+    bFound = supQueryObjectFromHandle(hDirectory, lpRootAddress, lpTypeIndex);
+    NtClose(hDirectory);
+    return bFound;
 }
 
 /*
@@ -504,40 +504,39 @@ BOOL ObGetDirectoryObjectAddress(
 *
 * Purpose:
 *
-* Reads object name from kernel memory
+* Reads object name from kernel memory, returned buffer must be freed with supHeapFree
 *
 */
 LPWSTR ObQueryNameString(
-	_In_ ULONG_PTR NameInfoAddress,
-	_Out_opt_ PSIZE_T ReturnLength
-	)
+    _In_ ULONG_PTR NameInfoAddress,
+    _Out_opt_ PSIZE_T ReturnLength
+)
 {
-	ULONG  fLen;
-	LPWSTR lpObjectName;
-	
-	OBJECT_HEADER_NAME_INFO NameInfo;
+    ULONG  fLen;
+    LPWSTR lpObjectName = NULL;
 
-	RtlSecureZeroMemory(&NameInfo, sizeof(OBJECT_HEADER_NAME_INFO));
-	if (!kdReadSystemMemory(NameInfoAddress, &NameInfo, sizeof(OBJECT_HEADER_NAME_INFO)))
-		return NULL;
+    OBJECT_HEADER_NAME_INFO NameInfo;
 
-	fLen = NameInfo.Name.Length + sizeof(UNICODE_NULL);
-	lpObjectName = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, fLen);
-	if (lpObjectName == NULL)
-		return NULL;
+    if (ReturnLength)
+        *ReturnLength = 0;
 
-	NameInfoAddress = (ULONG_PTR)NameInfo.Name.Buffer;
-	if (!kdReadSystemMemory(NameInfoAddress, lpObjectName, NameInfo.Name.Length)) {
-		if (ReturnLength) {
-			*ReturnLength = 0;
-		}
-		HeapFree(GetProcessHeap(), 0, lpObjectName);
-		return NULL;
-	}
-	if (ReturnLength) {
-		*ReturnLength = fLen;
-	}
-	return lpObjectName;
+    RtlSecureZeroMemory(&NameInfo, sizeof(OBJECT_HEADER_NAME_INFO));
+    if (kdReadSystemMemory(NameInfoAddress, &NameInfo, sizeof(OBJECT_HEADER_NAME_INFO))) {
+        fLen = NameInfo.Name.Length + sizeof(UNICODE_NULL);
+        lpObjectName = supHeapAlloc(fLen);
+        if (lpObjectName != NULL) {
+            NameInfoAddress = (ULONG_PTR)NameInfo.Name.Buffer;
+            if (kdReadSystemMemory(NameInfoAddress, lpObjectName, NameInfo.Name.Length)) {
+                if (ReturnLength)
+                    *ReturnLength = fLen;
+            }
+            else {
+                supHeapFree(lpObjectName);
+                lpObjectName = NULL;
+            }
+        }
+    }
+    return lpObjectName;
 }
 
 /*
@@ -546,243 +545,243 @@ LPWSTR ObQueryNameString(
 * Purpose:
 *
 * Walks given directory and looks for specified object inside
-* Returned object must be freed wtih HeapFree when no longer needed.
+* Returned object must be freed wtih supHeapFree when no longer needed.
 *
 */
 POBJINFO ObWalkDirectory(
-	_In_ LPWSTR lpObjectToFind,
-	_In_ ULONG_PTR DirectoryAddress
-	)
+    _In_ LPWSTR lpObjectToFind,
+    _In_ ULONG_PTR DirectoryAddress
+)
 {
-	BOOL      bFound;
-	INT       c;
-	SIZE_T    retSize;
-	POBJINFO  lpData;
-	LPWSTR    lpObjectName;
-	ULONG_PTR ObjectHeaderAddress, item0, item1, InfoHeaderAddress;
+    BOOL      bFound;
+    INT       c;
+    SIZE_T    retSize;
+    POBJINFO  lpData;
+    LPWSTR    lpObjectName;
+    ULONG_PTR ObjectHeaderAddress, item0, item1, InfoHeaderAddress;
 
-	OBJECT_HEADER          ObjectHeader;
-	OBJECT_DIRECTORY       DirObject;
-	OBJECT_DIRECTORY_ENTRY Entry;
+    OBJECT_HEADER          ObjectHeader;
+    OBJECT_DIRECTORY       DirObject;
+    OBJECT_DIRECTORY_ENTRY Entry;
 
-	__try {
+    __try {
 
-		if (lpObjectToFind == NULL)
-			return NULL;
+        if (lpObjectToFind == NULL)
+            return NULL;
 
-		RtlSecureZeroMemory(&DirObject, sizeof(OBJECT_DIRECTORY));
-		if (!kdReadSystemMemory(DirectoryAddress, &DirObject, sizeof(OBJECT_DIRECTORY))) {
-
-#ifdef _DEBUG
-			OutputDebugString(L"kdReadSystemMemory(DirectoryAddress) failed");
-#endif
-			return NULL;
-		}
-
-		lpObjectName = NULL;
-		retSize = 0;
-		bFound = FALSE;
-		lpData = NULL;
-
-		//check if root special case
-		if (_strcmpi(lpObjectToFind, L"\\") == 0) {
-
-			//read object header
-			RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
-			ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(DirectoryAddress);
-			if (!kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
+        RtlSecureZeroMemory(&DirObject, sizeof(OBJECT_DIRECTORY));
+        if (!kdReadSystemMemory(DirectoryAddress, &DirObject, sizeof(OBJECT_DIRECTORY))) {
 
 #ifdef _DEBUG
-				OutputDebugString(L"kdReadSystemMemory(ObjectHeaderAddress) failed");
+            OutputDebugString(L"kdReadSystemMemory(DirectoryAddress) failed");
 #endif
+            return NULL;
+        }
 
-				return NULL;
-			}
+        lpObjectName = NULL;
+        retSize = 0;
+        bFound = FALSE;
+        lpData = NULL;
 
-			lpData = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(OBJINFO));
-			if (lpData == NULL)
-				return NULL;
+        //check if root special case
+        if (_strcmpi(lpObjectToFind, L"\\") == 0) {
 
-			lpData->ObjectAddress = DirectoryAddress;
-			lpData->HeaderAddress = ObjectHeaderAddress;
-
-			//copy object header
-			supCopyMemory(&lpData->ObjectHeader, sizeof(lpData->ObjectHeader), &ObjectHeader, sizeof(OBJECT_HEADER));
-
-			//query and copy quota info
-			InfoHeaderAddress = 0;
-			if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderQuotaInfoFlag)) {
-				kdReadSystemMemory(ObjectHeaderAddress, &lpData->ObjectQuotaHeader, sizeof(OBJECT_HEADER_QUOTA_INFO));
-			}
-			return lpData;
-		}
-
-		//otherwise scan given object directory
-		for (c = 0; c < NUMBEROFBUCKETS; c++) {
-
-			item0 = (ULONG_PTR)DirObject.HashBuckets[c];
-			if (item0 != 0) {
-
-				item1 = item0;
-				do {
-
-					//read object directory entry
-					RtlSecureZeroMemory(&Entry, sizeof(OBJECT_DIRECTORY_ENTRY));
-					if (!kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY))) {
+            //read object header
+            RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
+            ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(DirectoryAddress);
+            if (!kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
 
 #ifdef _DEBUG
-						OutputDebugString(L"kdReadSystemMemory(OBJECT_DIRECTORY_ENTRY) failed");
+                OutputDebugString(L"kdReadSystemMemory(ObjectHeaderAddress) failed");
 #endif
-						break;
-					}		
 
-					//read object header
-					RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
-					ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(Entry.Object);
-					if (!kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
+                return NULL;
+            }
+
+            lpData = supHeapAlloc(sizeof(OBJINFO));
+            if (lpData == NULL)
+                return NULL;
+
+            lpData->ObjectAddress = DirectoryAddress;
+            lpData->HeaderAddress = ObjectHeaderAddress;
+
+            //copy object header
+            supCopyMemory(&lpData->ObjectHeader, sizeof(lpData->ObjectHeader), &ObjectHeader, sizeof(OBJECT_HEADER));
+
+            //query and copy quota info
+            InfoHeaderAddress = 0;
+            if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderQuotaInfoFlag)) {
+                kdReadSystemMemory(ObjectHeaderAddress, &lpData->ObjectQuotaHeader, sizeof(OBJECT_HEADER_QUOTA_INFO));
+            }
+            return lpData;
+        }
+
+        //otherwise scan given object directory
+        for (c = 0; c < NUMBEROFBUCKETS; c++) {
+
+            item0 = (ULONG_PTR)DirObject.HashBuckets[c];
+            if (item0 != 0) {
+
+                item1 = item0;
+                do {
+
+                    //read object directory entry
+                    RtlSecureZeroMemory(&Entry, sizeof(OBJECT_DIRECTORY_ENTRY));
+                    if (!kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY))) {
 
 #ifdef _DEBUG
-						OutputDebugString(L"kdReadSystemMemory(ObjectHeaderAddress) failed");
+                        OutputDebugString(L"kdReadSystemMemory(OBJECT_DIRECTORY_ENTRY) failed");
 #endif
-						goto NextItem;
-					}
+                        break;
+                    }
 
-					//check if object has name
-					InfoHeaderAddress = 0;
-					retSize = 0;
-					if (!ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderNameInfoFlag)) {
-						goto NextItem;
-					}
+                    //read object header
+                    RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
+                    ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(Entry.Object);
+                    if (!kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
 
-					//object has name, query it
-					lpObjectName = ObQueryNameString(InfoHeaderAddress, &retSize);
-					if ((lpObjectName == NULL) || (retSize == 0))
-						goto NextItem;
+#ifdef _DEBUG
+                        OutputDebugString(L"kdReadSystemMemory(ObjectHeaderAddress) failed");
+#endif
+                        goto NextItem;
+                    }
 
-					//compare full object names
-					bFound = (_strcmpi(lpObjectName, lpObjectToFind) == 0);
-					HeapFree(GetProcessHeap(), 0, lpObjectName);
-					if (bFound == FALSE) {
-						goto NextItem;
-					}
-					//identical, allocate item info and copy it
-					lpData = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(OBJINFO));
-					if (lpData) {
+                    //check if object has name
+                    InfoHeaderAddress = 0;
+                    retSize = 0;
+                    if (!ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderNameInfoFlag)) {
+                        goto NextItem;
+                    }
 
-						lpData->ObjectAddress = (ULONG_PTR)Entry.Object;
-						lpData->HeaderAddress = ObjectHeaderAddress;
+                    //object has name, query it
+                    lpObjectName = ObQueryNameString(InfoHeaderAddress, &retSize);
+                    if ((lpObjectName == NULL) || (retSize == 0))
+                        goto NextItem;
 
-						//copy object header
-						supCopyMemory(&lpData->ObjectHeader, sizeof(OBJECT_HEADER), &ObjectHeader, sizeof(OBJECT_HEADER));
-						//query and copy quota info
-						InfoHeaderAddress = 0;
-						if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderQuotaInfoFlag)) {
-							kdReadSystemMemory(InfoHeaderAddress, &lpData->ObjectQuotaHeader, sizeof(OBJECT_HEADER_QUOTA_INFO));
-						}
-					}
+                    //compare full object names
+                    bFound = (_strcmpi(lpObjectName, lpObjectToFind) == 0);
+                    supHeapFree(lpObjectName);
+                    if (bFound == FALSE) {
+                        goto NextItem;
+                    }
+                    //identical, allocate item info and copy it
+                    lpData = supHeapAlloc(sizeof(OBJINFO));
+                    if (lpData) {
 
-				NextItem:
-					if (bFound)
-						break;
+                        lpData->ObjectAddress = (ULONG_PTR)Entry.Object;
+                        lpData->HeaderAddress = ObjectHeaderAddress;
 
-					item1 = (ULONG_PTR)Entry.ChainLink;
-				} while (item1 != 0);
-			}
-			if (bFound)
-				break;
-		}
+                        //copy object header
+                        supCopyMemory(&lpData->ObjectHeader, sizeof(OBJECT_HEADER), &ObjectHeader, sizeof(OBJECT_HEADER));
+                        //query and copy quota info
+                        InfoHeaderAddress = 0;
+                        if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderQuotaInfoFlag)) {
+                            kdReadSystemMemory(InfoHeaderAddress, &lpData->ObjectQuotaHeader, sizeof(OBJECT_HEADER_QUOTA_INFO));
+                        }
+                    }
 
-	}
-	__except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
-		return NULL;
-	}
-	return lpData;
+                NextItem:
+                    if (bFound)
+                        break;
+
+                    item1 = (ULONG_PTR)Entry.ChainLink;
+                } while (item1 != 0);
+            }
+            if (bFound)
+                break;
+        }
+
+    }
+    __except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
+        return NULL;
+    }
+    return lpData;
 }
 
 /*
 * ObQueryObject
-* 
+*
 * Purpose:
 *
 * Look for object inside specified directory
 * If object is directory look for it in upper directory
-* Returned object memory must be released with HeapFree when object is no longer needed.
+* Returned object memory must be released with supHeapFree when object is no longer needed.
 *
 */
 POBJINFO ObQueryObject(
-	_In_ LPWSTR lpDirectory,
-	_In_ LPWSTR lpObjectName
-	)
+    _In_ LPWSTR lpDirectory,
+    _In_ LPWSTR lpObjectName
+)
 {
-	BOOL       needFree = FALSE;
-	ULONG_PTR  DirectoryAddress;
-	SIZE_T     i, l, rdirLen, ldirSz;
-	LPWSTR     SingleDirName, LookupDirName;
-	
-	if (
-		(lpObjectName == NULL) ||
-		(lpDirectory == NULL) ||
-		(g_kdctx.hDevice == NULL)
+    BOOL       needFree = FALSE;
+    ULONG_PTR  DirectoryAddress;
+    SIZE_T     i, l, rdirLen, ldirSz;
+    LPWSTR     SingleDirName, LookupDirName;
 
-		)
-	{
-		return NULL;
-	}
+    if (
+        (lpObjectName == NULL) ||
+        (lpDirectory == NULL) ||
+        (g_kdctx.hDevice == NULL)
 
-	__try {
+        )
+    {
+        return NULL;
+    }
 
-		LookupDirName = lpDirectory;
+    __try {
 
-		//
-		// 1) Check if object is directory self
-		// Extract directory name and compare (case insensitive) with object name
-		// Else go to 3
-		//
-		l = 0;
-		rdirLen = _strlen(lpDirectory);
-		for (i = 0; i < rdirLen; i++) {
-			if (lpDirectory[i] == '\\')
-				l = i + 1;
-		}
-		SingleDirName = &lpDirectory[l];
-		if (_strcmpi(SingleDirName, lpObjectName) == 0) {
-			//
-			//  2) If we are looking for directory itself, move search directory up
-			//  e.g. lpDirectory = \ObjectTypes, lpObjectName = ObjectTypes then lpDirectory = \ 
-			//
-			ldirSz = rdirLen * sizeof(WCHAR) + sizeof(UNICODE_NULL);
-			LookupDirName = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ldirSz);
-			if (LookupDirName == NULL)
-				return NULL;
+        LookupDirName = lpDirectory;
 
-			needFree = TRUE;
+        //
+        // 1) Check if object is directory self
+        // Extract directory name and compare (case insensitive) with object name
+        // Else go to 3
+        //
+        l = 0;
+        rdirLen = _strlen(lpDirectory);
+        for (i = 0; i < rdirLen; i++) {
+            if (lpDirectory[i] == '\\')
+                l = i + 1;
+        }
+        SingleDirName = &lpDirectory[l];
+        if (_strcmpi(SingleDirName, lpObjectName) == 0) {
+            //
+            //  2) If we are looking for directory itself, move search directory up
+            //  e.g. lpDirectory = \ObjectTypes, lpObjectName = ObjectTypes then lpDirectory = \ 
+            //
+            ldirSz = rdirLen * sizeof(WCHAR) + sizeof(UNICODE_NULL);
+            LookupDirName = supHeapAlloc(ldirSz);
+            if (LookupDirName == NULL)
+                return NULL;
 
-			//special case for root 
-			if (l == 1) l++;
+            needFree = TRUE;
 
-			supCopyMemory(LookupDirName, ldirSz, lpDirectory, (l - 1) * sizeof(WCHAR));
-		}
-		
-		//
-		// 3) Get Directory address where we will look for object
-		//
-		DirectoryAddress = 0;
-		if (ObGetDirectoryObjectAddress(LookupDirName, &DirectoryAddress, NULL)) {
+            //special case for root 
+            if (l == 1) l++;
 
-			if (needFree)
-				HeapFree(GetProcessHeap(), 0, LookupDirName);
+            supCopyMemory(LookupDirName, ldirSz, lpDirectory, (l - 1) * sizeof(WCHAR));
+        }
 
-			//
-			// 4) Find object in directory by name (case insensitive)
-			//
-			return ObWalkDirectory(lpObjectName, DirectoryAddress);
-		}
-	}
+        //
+        // 3) Get Directory address where we will look for object
+        //
+        DirectoryAddress = 0;
+        if (ObGetDirectoryObjectAddress(LookupDirName, &DirectoryAddress, NULL)) {
 
-	__except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
-		return NULL;
-	}
-	return NULL;
+            if (needFree)
+                supHeapFree(LookupDirName);
+
+            //
+            // 4) Find object in directory by name (case insensitive)
+            //
+            return ObWalkDirectory(lpObjectName, DirectoryAddress);
+        }
+    }
+
+    __except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
+        return NULL;
+    }
+    return NULL;
 }
 
 /*
@@ -794,11 +793,11 @@ POBJINFO ObQueryObject(
 *
 */
 BOOL ObDumpTypeInfo(
-	_In_ ULONG_PTR ObjectAddress,
-	_Inout_ POBJECT_TYPE_COMPATIBLE ObjectTypeInfo
-	)
+    _In_ ULONG_PTR ObjectAddress,
+    _Inout_ POBJECT_TYPE_COMPATIBLE ObjectTypeInfo
+)
 {
-	return kdReadSystemMemory(ObjectAddress, ObjectTypeInfo, sizeof(OBJECT_TYPE_COMPATIBLE));
+    return kdReadSystemMemory(ObjectAddress, ObjectTypeInfo, sizeof(OBJECT_TYPE_COMPATIBLE));
 }
 
 /*
@@ -810,145 +809,145 @@ BOOL ObDumpTypeInfo(
 *
 */
 VOID ObWalkDirectoryRecursiveEx(
-	BOOL fIsRoot,
-	PLIST_ENTRY ListHead,
-	LPWSTR lpRootDirectory,
-	ULONG_PTR DirectoryAddress,
-	UCHAR DirectoryTypeIndex
-	)
+    _In_ BOOL fIsRoot,
+    _In_ PLIST_ENTRY ListHead,
+    _In_opt_ LPWSTR lpRootDirectory,
+    _In_ ULONG_PTR DirectoryAddress,
+    _In_ USHORT DirectoryTypeIndex
+)
 {
-	UCHAR      ObjectTypeIndex;
-	INT        c;
-	SIZE_T     dirLen, fLen, rdirLen, retSize;
-	ULONG_PTR  ObjectHeaderAddress, item0, item1, InfoHeaderAddress;
-	POBJREF    lpListEntry;
-	LPWSTR     lpObjectName, lpDirectoryName;
+    UCHAR      ObjectTypeIndex;
+    INT        c;
+    SIZE_T     dirLen, fLen, rdirLen, retSize;
+    ULONG_PTR  ObjectHeaderAddress, item0, item1, InfoHeaderAddress;
+    POBJREF    lpListEntry;
+    LPWSTR     lpObjectName, lpDirectoryName;
 
-	OBJECT_HEADER ObjectHeader;
-	OBJECT_DIRECTORY DirObject;
-	OBJECT_DIRECTORY_ENTRY Entry;
+    OBJECT_HEADER ObjectHeader;
+    OBJECT_DIRECTORY DirObject;
+    OBJECT_DIRECTORY_ENTRY Entry;
 
-	RtlSecureZeroMemory(&DirObject, sizeof(OBJECT_DIRECTORY));
-	if (!kdReadSystemMemory(DirectoryAddress, &DirObject, sizeof(OBJECT_DIRECTORY)))
-		return;
+    RtlSecureZeroMemory(&DirObject, sizeof(OBJECT_DIRECTORY));
+    if (!kdReadSystemMemory(DirectoryAddress, &DirObject, sizeof(OBJECT_DIRECTORY)))
+        return;
 
-	if (lpRootDirectory != NULL) {
-		rdirLen = _strlen(lpRootDirectory) * sizeof(WCHAR);
-	}
-	else {
-		rdirLen = 0;
-	}
+    if (lpRootDirectory != NULL) {
+        rdirLen = (1 + _strlen(lpRootDirectory)) * sizeof(WCHAR);
+    }
+    else {
+        rdirLen = 0;
+    }
 
-	lpObjectName = NULL;
-	retSize = 0;
-	ObjectTypeIndex = 0;
+    lpObjectName = NULL;
+    retSize = 0;
+    ObjectTypeIndex = 0;
 
-	for (c = 0; c < NUMBEROFBUCKETS; c++) {
+    for (c = 0; c < NUMBEROFBUCKETS; c++) {
 
-		item0 = (ULONG_PTR)DirObject.HashBuckets[c];
-		if (item0 != 0) {
-			item1 = item0;
-			do {
+        item0 = (ULONG_PTR)DirObject.HashBuckets[c];
+        if (item0 != 0) {
+            item1 = item0;
+            do {
 
-				//read object directory entry
-				RtlSecureZeroMemory(&Entry, sizeof(OBJECT_DIRECTORY_ENTRY));
-				if (kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY))) {
+                //read object directory entry
+                RtlSecureZeroMemory(&Entry, sizeof(OBJECT_DIRECTORY_ENTRY));
+                if (kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY))) {
 
-					/*
-					** Read object
-					** First read header from directory entry object
-					*/
-					RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
-					ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(Entry.Object);
-					if (kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
+                    /*
+                    ** Read object
+                    ** First read header from directory entry object
+                    */
+                    RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
+                    ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(Entry.Object);
+                    if (kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
 
-						/*
-						** Second read object data
-						*/
-						//query name
-						InfoHeaderAddress = 0;
-						retSize = 0;
-						if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderNameInfoFlag)) {
-							lpObjectName = ObQueryNameString(InfoHeaderAddress, &retSize);
-						}
+                        /*
+                        ** Second read object data
+                        */
+                        //query name
+                        InfoHeaderAddress = 0;
+                        retSize = 0;
+                        if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderNameInfoFlag)) {
+                            lpObjectName = ObQueryNameString(InfoHeaderAddress, &retSize);
+                        }
 
-						//allocate list entry
-						lpListEntry = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(OBJREF));
-						if (lpListEntry) {
+                        //allocate list entry
+                        lpListEntry = supHeapAlloc(sizeof(OBJREF));
+                        if (lpListEntry) {
 
-							//save object address
-							lpListEntry->ObjectAddress = (ULONG_PTR)Entry.Object;
-							lpListEntry->HeaderAddress = ObjectHeaderAddress;
-							lpListEntry->TypeIndex = ObjectHeader.TypeIndex;
+                            //save object address
+                            lpListEntry->ObjectAddress = (ULONG_PTR)Entry.Object;
+                            lpListEntry->HeaderAddress = ObjectHeaderAddress;
+                            lpListEntry->TypeIndex = ObjectHeader.TypeIndex;
 
-							//copy dir + name
-							if (lpObjectName) {
+                            //copy dir + name
+                            if (lpObjectName) {
 
-								fLen = (_strlen(lpObjectName) * sizeof(WCHAR)) +
-									(2 * sizeof(WCHAR)) +
-									rdirLen + sizeof(UNICODE_NULL);
+                                fLen = (_strlen(lpObjectName) * sizeof(WCHAR)) +
+                                    (2 * sizeof(WCHAR)) +
+                                    rdirLen + sizeof(UNICODE_NULL);
 
-								lpListEntry->ObjectName = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, fLen);
-								if (lpListEntry->ObjectName) {
-									_strcpy(lpListEntry->ObjectName, lpRootDirectory);
-									if (fIsRoot == FALSE) {
-										_strcat(lpListEntry->ObjectName, L"\\");
-									}
-									_strcat(lpListEntry->ObjectName, lpObjectName);
-								}
-							}
+                                lpListEntry->ObjectName = supHeapAlloc(fLen);
+                                if (lpListEntry->ObjectName) {
+                                    _strcpy(lpListEntry->ObjectName, lpRootDirectory);
+                                    if (fIsRoot == FALSE) {
+                                        _strcat(lpListEntry->ObjectName, L"\\");
+                                    }
+                                    _strcat(lpListEntry->ObjectName, lpObjectName);
+                                }
+                            }
 
-							InsertHeadList(ListHead, &lpListEntry->ListEntry);
-						}
+                            InsertHeadList(ListHead, &lpListEntry->ListEntry);
+                        }
 
-						//current object is directory
-						ObjectTypeIndex = ObDecodeTypeIndex(Entry.Object, ObjectHeader.TypeIndex);
-						if (ObjectTypeIndex == DirectoryTypeIndex) {
+                        //current object is directory
+                        ObjectTypeIndex = ObDecodeTypeIndex(Entry.Object, ObjectHeader.TypeIndex);
+                        if (ObjectTypeIndex == DirectoryTypeIndex) {
 
-							/*
-							** Build new directory string (old directory + \ + current)
-							*/
-							fLen = 0;
-							if (lpObjectName) {
-								fLen = retSize;
-							}
+                            /*
+                            ** Build new directory string (old directory + \ + current)
+                            */
+                            fLen = 0;
+                            if (lpObjectName) {
+                                fLen = retSize;
+                            }
 
-							dirLen = fLen + rdirLen + (2 * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
-							lpDirectoryName = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dirLen);
-							if (lpDirectoryName) {
-								_strcpy(lpDirectoryName, lpRootDirectory);
-								if (fIsRoot == FALSE) {
-									_strcat(lpDirectoryName, L"\\");
-								}
-								if (lpObjectName) {
-									_strcat(lpDirectoryName, lpObjectName);
-								}
-							}
+                            dirLen = fLen + rdirLen + (2 * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
+                            lpDirectoryName = supHeapAlloc(dirLen);
+                            if (lpDirectoryName) {
+                                _strcpy(lpDirectoryName, lpRootDirectory);
+                                if (fIsRoot == FALSE) {
+                                    _strcat(lpDirectoryName, L"\\");
+                                }
+                                if (lpObjectName) {
+                                    _strcat(lpDirectoryName, lpObjectName);
+                                }
+                            }
 
-							ObWalkDirectoryRecursiveEx(FALSE, ListHead, lpDirectoryName, (ULONG_PTR)Entry.Object, DirectoryTypeIndex);
+                            ObWalkDirectoryRecursiveEx(FALSE, ListHead, lpDirectoryName, (ULONG_PTR)Entry.Object, DirectoryTypeIndex);
 
-							if (lpDirectoryName) {
-								HeapFree(GetProcessHeap(), 0, lpDirectoryName);
-								lpDirectoryName = NULL;
-							}
-						}
+                            if (lpDirectoryName) {
+                                supHeapFree(lpDirectoryName);
+                                lpDirectoryName = NULL;
+                            }
+                        }
 
-						if (lpObjectName) {
-							HeapFree(GetProcessHeap(), 0, lpObjectName);
-							lpObjectName = NULL;
-						}
+                        if (lpObjectName) {
+                            supHeapFree(lpObjectName);
+                            lpObjectName = NULL;
+                        }
 
-					} //if (kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER)))
+                    } //if (kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER)))
 
-					item1 = (ULONG_PTR)Entry.ChainLink;
+                    item1 = (ULONG_PTR)Entry.ChainLink;
 
-				} //if (kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY)))			
-				else {
-					item1 = 0;
-				}
-			} while (item1 != 0);
-		}
-	}
+                } //if (kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY)))			
+                else {
+                    item1 = 0;
+                }
+            } while (item1 != 0);
+        }
+    }
 }
 
 /*
@@ -960,146 +959,144 @@ VOID ObWalkDirectoryRecursiveEx(
 *
 */
 BOOL ObWalkPrivateNamespaceTable(
-	_In_ PLIST_ENTRY ListHead,
-	_In_ ULONG_PTR TableAddress
-	)
+    _In_ PLIST_ENTRY ListHead,
+    _In_ ULONG_PTR TableAddress
+)
 {
-	BOOL          EntryFound;
-	INT           c, d;
-	SIZE_T        retSize = 0;
-	ULONG_PTR     ObjectHeaderAddress, item0, item1, InfoHeaderAddress, NameSpaceIdMax = 0L;
-	PLIST_ENTRY   Current, Head, FindEntry;
-	POBJREF       lpListEntry, ObjectInfo;
-	LPWSTR        lpObjectName = NULL;
+    BOOL          EntryFound;
+    INT           c, d;
+    SIZE_T        retSize = 0;
+    ULONG_PTR     ObjectHeaderAddress, item0, item1, InfoHeaderAddress, NameSpaceIdMax = 0L;
+    PLIST_ENTRY   Current, Head, FindEntry;
+    POBJREF       lpListEntry, ObjectInfo;
+    LPWSTR        lpObjectName = NULL;
 
-	OBJECT_HEADER                ObjectHeader;
-	OBJECT_DIRECTORY             DirObject;
-	OBJECT_DIRECTORY_ENTRY       Entry;
-	OBJECT_NAMESPACE_LOOKUPTABLE LookupTable;
-	OBJECT_NAMESPACE_ENTRY       LookupEntry;
+    OBJECT_HEADER                ObjectHeader;
+    OBJECT_DIRECTORY             DirObject;
+    OBJECT_DIRECTORY_ENTRY       Entry;
+    OBJECT_NAMESPACE_LOOKUPTABLE LookupTable;
+    OBJECT_NAMESPACE_ENTRY       LookupEntry;
 
-	if (
-		(ListHead == NULL) ||
-		(TableAddress == 0)
-		) 
-	{
-		return FALSE;
-	}
+    if (
+        (ListHead == NULL) ||
+        (TableAddress == 0)
+        )
+    {
+        return FALSE;
+    }
 
-	//dump namespace lookup table
-	RtlSecureZeroMemory(&LookupTable, sizeof(OBJECT_NAMESPACE_LOOKUPTABLE));
-	if (!kdReadSystemMemory(TableAddress,
-		&LookupTable, sizeof(OBJECT_NAMESPACE_LOOKUPTABLE)))
-	{
-		return FALSE;
-	}
+    //dump namespace lookup table
+    RtlSecureZeroMemory(&LookupTable, sizeof(OBJECT_NAMESPACE_LOOKUPTABLE));
+    if (!kdReadSystemMemory(TableAddress,
+        &LookupTable, sizeof(OBJECT_NAMESPACE_LOOKUPTABLE)))
+    {
+        return FALSE;
+    }
 
-	//parse each element
-	for (c = 0; c < NUMBEROFBUCKETS; c++) {
+    //parse each element
+    for (c = 0; c < NUMBEROFBUCKETS; c++) {
 
-		Head = LookupTable.HashBuckets[c].Blink;
-		Current = LookupTable.HashBuckets[c].Flink;
+        Head = LookupTable.HashBuckets[c].Blink;
+        Current = LookupTable.HashBuckets[c].Flink;
 
-		do {
-			RtlSecureZeroMemory(&LookupEntry, sizeof(OBJECT_NAMESPACE_ENTRY));
-			if (!kdReadSystemMemory((ULONG_PTR)Current, &LookupEntry, sizeof(OBJECT_NAMESPACE_ENTRY))) {
-				break;
-			}
-			Current = LookupEntry.ListEntry.Flink;
-			if (Current == Head) {
-				break;
-			}
+        do {
+            RtlSecureZeroMemory(&LookupEntry, sizeof(OBJECT_NAMESPACE_ENTRY));
+            if (!kdReadSystemMemory((ULONG_PTR)Current, &LookupEntry, sizeof(OBJECT_NAMESPACE_ENTRY))) {
+                break;
+            }
+            Current = LookupEntry.ListEntry.Flink;
+            if (Current == Head) {
+                break;
+            }
 
-			//read namespace directory address
-			RtlSecureZeroMemory(&DirObject, sizeof(OBJECT_DIRECTORY));
-			if (!kdReadSystemMemory((ULONG_PTR)LookupEntry.NamespaceRootDirectory,
-				&DirObject, sizeof(OBJECT_DIRECTORY)))
-			{
-				break;
-			}
+            //read namespace directory address
+            RtlSecureZeroMemory(&DirObject, sizeof(OBJECT_DIRECTORY));
+            if (!kdReadSystemMemory((ULONG_PTR)LookupEntry.NamespaceRootDirectory,
+                &DirObject, sizeof(OBJECT_DIRECTORY)))
+            {
+                break;
+            }
 
-			//parse namespace directory
-			for (d = 0; d < NUMBEROFBUCKETS; d++) {
+            //parse namespace directory
+            for (d = 0; d < NUMBEROFBUCKETS; d++) {
 
-				item0 = (ULONG_PTR)DirObject.HashBuckets[d];
-				if (item0 != 0) {
-					item1 = item0;
-					do {
-						//read object directory entry
-						RtlSecureZeroMemory(&Entry, sizeof(OBJECT_DIRECTORY_ENTRY));
-						if (kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY))) {
+                item0 = (ULONG_PTR)DirObject.HashBuckets[d];
+                if (item0 != 0) {
+                    item1 = item0;
+                    do {
+                        //read object directory entry
+                        RtlSecureZeroMemory(&Entry, sizeof(OBJECT_DIRECTORY_ENTRY));
+                        if (kdReadSystemMemory(item1, &Entry, sizeof(OBJECT_DIRECTORY_ENTRY))) {
 
-							RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
-							ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(Entry.Object);
-							if (kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
+                            RtlSecureZeroMemory(&ObjectHeader, sizeof(OBJECT_HEADER));
+                            ObjectHeaderAddress = (ULONG_PTR)OBJECT_TO_OBJECT_HEADER(Entry.Object);
+                            if (kdReadSystemMemory(ObjectHeaderAddress, &ObjectHeader, sizeof(OBJECT_HEADER))) {
 
-								//query name
-								InfoHeaderAddress = 0;
-								retSize = 0;
-								if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderNameInfoFlag)) {
-									lpObjectName = ObQueryNameString(InfoHeaderAddress, &retSize);
-								}
+                                //query name
+                                InfoHeaderAddress = 0;
+                                retSize = 0;
+                                if (ObHeaderToNameInfoAddress(ObjectHeader.InfoMask, ObjectHeaderAddress, &InfoHeaderAddress, HeaderNameInfoFlag)) {
+                                    lpObjectName = ObQueryNameString(InfoHeaderAddress, &retSize);
+                                }
 
-								//allocate list entry
-								lpListEntry = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(OBJREF));
-								if (lpListEntry) {
+                                //allocate list entry
+                                lpListEntry = supHeapAlloc(sizeof(OBJREF));
+                                if (lpListEntry) {
 
-									//save object address
-									lpListEntry->ObjectAddress = (ULONG_PTR)Entry.Object;
-									lpListEntry->HeaderAddress = ObjectHeaderAddress;
-									lpListEntry->TypeIndex = ObjectHeader.TypeIndex;
+                                    //save object address
+                                    lpListEntry->ObjectAddress = (ULONG_PTR)Entry.Object;
+                                    lpListEntry->HeaderAddress = ObjectHeaderAddress;
+                                    lpListEntry->TypeIndex = ObjectHeader.TypeIndex;
 
-									//save object namespace address
-									lpListEntry->NamespaceDirectoryAddress = (ULONG_PTR)LookupEntry.NamespaceRootDirectory;
+                                    //save object namespace address
+                                    lpListEntry->NamespaceDirectoryAddress = (ULONG_PTR)LookupEntry.NamespaceRootDirectory;
 
-									//assign id
-									EntryFound = FALSE;
-									FindEntry = ListHead->Flink;
-									while ((FindEntry != NULL) && (FindEntry != ListHead)) {
-										ObjectInfo = CONTAINING_RECORD(FindEntry, OBJREF, ListEntry);
-										if (ObjectInfo) {
-											if (lpListEntry->NamespaceDirectoryAddress == ObjectInfo->NamespaceDirectoryAddress) {
-												lpListEntry->NamespaceId = ObjectInfo->NamespaceId;
-												EntryFound = TRUE;
-												break;
-											}
-										}
-										FindEntry = FindEntry->Flink;
-									}
-									if (EntryFound == FALSE) {
-										lpListEntry->NamespaceId = NameSpaceIdMax++;
-									}
+                                    //assign id
+                                    EntryFound = FALSE;
+                                    FindEntry = ListHead->Flink;
+                                    while ((FindEntry != NULL) && (FindEntry != ListHead)) {
+                                        ObjectInfo = CONTAINING_RECORD(FindEntry, OBJREF, ListEntry);
+                                        if (lpListEntry->NamespaceDirectoryAddress == ObjectInfo->NamespaceDirectoryAddress) {
+                                            lpListEntry->NamespaceId = ObjectInfo->NamespaceId;
+                                            EntryFound = TRUE;
+                                            break;
+                                        }
+                                        FindEntry = FindEntry->Flink;
+                                    }
+                                    if (EntryFound == FALSE) {
+                                        lpListEntry->NamespaceId = NameSpaceIdMax++;
+                                    }
 
-									//copy object name
-									if (lpObjectName) {
-										lpListEntry->ObjectName = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, retSize);
-										if (lpListEntry->ObjectName) {
-											_strcpy(lpListEntry->ObjectName, lpObjectName);
-										}
-									}
-									InsertHeadList(ListHead, &lpListEntry->ListEntry);
-								}
+                                    //copy object name
+                                    if (lpObjectName) {
+                                        lpListEntry->ObjectName = supHeapAlloc(retSize);
+                                        if (lpListEntry->ObjectName) {
+                                            _strcpy(lpListEntry->ObjectName, lpObjectName);
+                                        }
+                                    }
+                                    InsertHeadList(ListHead, &lpListEntry->ListEntry);
+                                }
 
-								//free memory allocated for object name
-								if (lpObjectName) {
-									HeapFree(GetProcessHeap(), 0, lpObjectName);
-									lpObjectName = NULL;
-								}
+                                //free memory allocated for object name
+                                if (lpObjectName) {
+                                    supHeapFree(lpObjectName);
+                                    lpObjectName = NULL;
+                                }
 
-							}
+                            }
 
-							item1 = (ULONG_PTR)Entry.ChainLink;
-						}
-						else {
-							item1 = 0;
-						}
-					} while (item1 != 0);
-				}
-			}
-		} while ((Current != NULL) && (Current != Head));
-	}
+                            item1 = (ULONG_PTR)Entry.ChainLink;
+                        }
+                        else {
+                            item1 = 0;
+                        }
+                    } while (item1 != 0);
+                }
+            }
+        } while ((Current != NULL) && (Current != Head));
+    }
 
-	return (!IsListEmpty(ListHead));
+    return (!IsListEmpty(ListHead));
 }
 
 /*
@@ -1115,70 +1112,70 @@ BOOL ObWalkPrivateNamespaceTable(
 *
 */
 BOOL ObListCreate(
-	_Inout_ PLIST_ENTRY ListHead,
-	_In_ BOOL fNamespace
-	)
+    _Inout_ PLIST_ENTRY ListHead,
+    _In_ BOOL fNamespace
+)
 {
-	BOOL bResult;
+    BOOL bResult;
 
-	bResult = FALSE;
-	if (g_kdctx.hDevice == NULL) {
-		return bResult;
-	}
+    bResult = FALSE;
+    if (g_kdctx.hDevice == NULL) {
+        return bResult;
+    }
 
-	if (ListHead == NULL) {
-		return bResult;
-	}
+    if (ListHead == NULL) {
+        return bResult;
+    }
 
-	EnterCriticalSection(&g_kdctx.ListLock);
+    RtlEnterCriticalSection(&g_kdctx.ListLock);
 
-	__try {
-		
-		InitializeListHead(ListHead);
+    __try {
 
-		if ( fNamespace == FALSE ) {
-			if (
-				(g_kdctx.DirectoryRootAddress == 0) ||
-				(g_kdctx.DirectoryTypeIndex == 0)
-				)
-			{
-				if (!ObGetDirectoryObjectAddress(NULL, &g_kdctx.DirectoryRootAddress,
-					&g_kdctx.DirectoryTypeIndex))
-				{
-					SetLastError(ERROR_INTERNAL_ERROR);
-				}
-			}
+        InitializeListHead(ListHead);
 
-			if (
-				(g_kdctx.DirectoryRootAddress != 0) &&
-				(g_kdctx.DirectoryTypeIndex != 0)
-				)
-			{
-				
-				ObWalkDirectoryRecursiveEx(TRUE, ListHead, L"\\",
-					g_kdctx.DirectoryRootAddress, g_kdctx.DirectoryTypeIndex);
-				bResult = TRUE;
-			}
-		}
-		else {
+        if (fNamespace == FALSE) {
+            if (
+                (g_kdctx.DirectoryRootAddress == 0) ||
+                (g_kdctx.DirectoryTypeIndex == 0)
+                )
+            {
+                if (!ObGetDirectoryObjectAddress(NULL, &g_kdctx.DirectoryRootAddress,
+                    &g_kdctx.DirectoryTypeIndex))
+                {
+                    SetLastError(ERROR_INTERNAL_ERROR);
+                }
+            }
 
-			if (g_kdctx.ObpPrivateNamespaceLookupTable != 0) {
-				bResult = ObWalkPrivateNamespaceTable(ListHead, (ULONG_PTR)g_kdctx.ObpPrivateNamespaceLookupTable);
-			}
-			else {
-				SetLastError(ERROR_INTERNAL_ERROR);
-			}
+            if (
+                (g_kdctx.DirectoryRootAddress != 0) &&
+                (g_kdctx.DirectoryTypeIndex != 0)
+                )
+            {
 
-		}
+                ObWalkDirectoryRecursiveEx(TRUE, ListHead, L"\\",
+                    g_kdctx.DirectoryRootAddress, g_kdctx.DirectoryTypeIndex);
+                bResult = TRUE;
+            }
+        }
+        else {
 
-	}
-	__except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
-		bResult = FALSE;
-	}
+            if (g_kdctx.ObpPrivateNamespaceLookupTable != 0) {
+                bResult = ObWalkPrivateNamespaceTable(ListHead, (ULONG_PTR)g_kdctx.ObpPrivateNamespaceLookupTable);
+            }
+            else {
+                SetLastError(ERROR_INTERNAL_ERROR);
+            }
 
-	LeaveCriticalSection(&g_kdctx.ListLock);
+        }
 
-	return bResult;
+    }
+    __except (exceptFilter(GetExceptionCode(), GetExceptionInformation())) {
+        bResult = FALSE;
+    }
+
+    RtlLeaveCriticalSection(&g_kdctx.ListLock);
+
+    return bResult;
 }
 
 /*
@@ -1190,36 +1187,31 @@ BOOL ObListCreate(
 *
 */
 VOID ObListDestroy(
-	_In_ PLIST_ENTRY ListHead
-	)
+    _In_ PLIST_ENTRY ListHead
+)
 {
-	POBJREF ObjectEntry;
+    POBJREF ObjectEntry;
 
-	if (
-		(g_kdctx.hDevice == NULL) ||
-		(ListHead == NULL) 
-		)
-	{
-		return;
-	}
+    if (g_kdctx.hDevice == NULL)
+        return;
 
-	EnterCriticalSection(&g_kdctx.ListLock);
+    RtlEnterCriticalSection(&g_kdctx.ListLock);
 
-	while (!IsListEmpty(ListHead)) {
-		if (ListHead->Flink == NULL)
-			break;
+    if (ListHead) {
+        while (!IsListEmpty(ListHead)) {
+            if (ListHead->Flink == NULL)
+                break;
 
-		ObjectEntry = CONTAINING_RECORD(ListHead->Flink, OBJREF, ListEntry);
-		RemoveEntryList(ListHead->Flink);
-		if (ObjectEntry) {
-			if (ObjectEntry->ObjectName) {
-				HeapFree(GetProcessHeap(), 0, ObjectEntry->ObjectName);
-			}
-			HeapFree(GetProcessHeap(), 0, ObjectEntry);
-		}
-	}
+            ObjectEntry = CONTAINING_RECORD(ListHead->Flink, OBJREF, ListEntry);
+            RemoveEntryList(ListHead->Flink);
+            if (ObjectEntry->ObjectName) {
+                supHeapFree(ObjectEntry->ObjectName);
+            }
+            supHeapFree(ObjectEntry);
+        }
+    }
 
-	LeaveCriticalSection(&g_kdctx.ListLock);
+    RtlLeaveCriticalSection(&g_kdctx.ListLock);
 }
 
 /*
@@ -1232,35 +1224,33 @@ VOID ObListDestroy(
 *
 */
 POBJREF ObListFindByAddress(
-	_In_ PLIST_ENTRY ListHead,
-	_In_ ULONG_PTR	 ObjectAddress
-	)
+    _In_ PLIST_ENTRY ListHead,
+    _In_ ULONG_PTR	 ObjectAddress
+)
 {
-	BOOL         bFound;
-	POBJREF      ObjectInfo;
-	PLIST_ENTRY  Entry;
+    BOOL         bFound;
+    POBJREF      ObjectInfo;
+    PLIST_ENTRY  Entry;
 
-	if (ListHead == NULL)
-		return NULL;
+    if (ListHead == NULL)
+        return NULL;
 
-	EnterCriticalSection(&g_kdctx.ListLock);
+    RtlEnterCriticalSection(&g_kdctx.ListLock);
 
-	ObjectInfo = NULL;
-	bFound = FALSE;
-	Entry = ListHead->Flink;
-	while ((Entry != NULL) && (Entry != ListHead)) {
-		ObjectInfo = CONTAINING_RECORD(Entry, OBJREF, ListEntry);
-		if (ObjectInfo) {
-			if (ObjectInfo->ObjectAddress == ObjectAddress) {
-				bFound = TRUE;
-				break;
-			}
-		}
-		Entry = Entry->Flink;
-	}
+    ObjectInfo = NULL;
+    bFound = FALSE;
+    Entry = ListHead->Flink;
+    while ((Entry != NULL) && (Entry != ListHead)) {
+        ObjectInfo = CONTAINING_RECORD(Entry, OBJREF, ListEntry);
+        if (ObjectInfo->ObjectAddress == ObjectAddress) {
+            bFound = TRUE;
+            break;
+        }
+        Entry = Entry->Flink;
+    }
 
-	LeaveCriticalSection(&g_kdctx.ListLock);
-	return (bFound) ? ObjectInfo : NULL;
+    RtlLeaveCriticalSection(&g_kdctx.ListLock);
+    return (bFound) ? ObjectInfo : NULL;
 }
 
 /*
@@ -1276,25 +1266,31 @@ POBJREF ObListFindByAddress(
 *    IRP_MJ_DEVICE_CONTROL
 */
 PVOID kdQueryIopInvalidDeviceRequest(
-	VOID
-	)
+    VOID
+)
 {
-	PVOID           pHandler;
-	POBJINFO        pSelfObj;
-	ULONG_PTR       drvObjectAddress;
-	DRIVER_OBJECT   drvObject;
+    PVOID           pHandler;
+    POBJINFO        pSelfObj;
+    ULONG_PTR       drvObjectAddress;
+    DRIVER_OBJECT   drvObject;
 
-	pHandler = NULL;
-	pSelfObj = ObQueryObject(L"\\Driver", KLDBGDRV);
-	if (pSelfObj) {
-		drvObjectAddress = pSelfObj->ObjectAddress;
-		RtlSecureZeroMemory(&drvObject, sizeof(drvObject));
-		if (kdReadSystemMemory(drvObjectAddress, &drvObject, sizeof(drvObject))) {
-			pHandler = drvObject.MajorFunction[IRP_MJ_CREATE_MAILSLOT];
-		}
-		HeapFree(GetProcessHeap(), 0, pSelfObj);
-	}
-	return pHandler;
+    pHandler = NULL;
+    pSelfObj = ObQueryObject(L"\\Driver", KLDBGDRV);
+    if (pSelfObj) {
+        drvObjectAddress = pSelfObj->ObjectAddress;
+        RtlSecureZeroMemory(&drvObject, sizeof(drvObject));
+        if (kdReadSystemMemory(drvObjectAddress, &drvObject, sizeof(drvObject))) {
+            pHandler = drvObject.MajorFunction[IRP_MJ_CREATE_MAILSLOT];
+
+            //
+            // IopInvalidDeviceRequest is a routine inside ntoskrnl.
+            //
+            if (!kdAddressInNtOsImage(pHandler))
+                pHandler = NULL;
+        }
+        supHeapFree(pSelfObj);
+    }
+    return pHandler;
 }
 
 /*
@@ -1306,45 +1302,67 @@ PVOID kdQueryIopInvalidDeviceRequest(
 *
 */
 BOOL kdIsDebugBoot(
-	VOID
-	)
+    VOID
+)
 {
-	BOOL    cond = FALSE, bResult = FALSE;
-	HKEY    hKey;
-	LPWSTR  lpszBootOptions = NULL;
-	LRESULT lRet;
-	SIZE_T  memIO;
-	DWORD   dwSize;
-	
-	do {
+    ULONG rl = 0;
+    SYSTEM_KERNEL_DEBUGGER_INFORMATION kdInfo;
 
-		lRet = RegOpenKeyExW(HKEY_LOCAL_MACHINE, RegControlKey, 0, KEY_QUERY_VALUE, &hKey);
-		if (lRet != ERROR_SUCCESS)
-			break;
+    RtlSecureZeroMemory(&kdInfo, sizeof(kdInfo));
+    NtQuerySystemInformation(SystemKernelDebuggerInformation, &kdInfo, sizeof(kdInfo), &rl);
+    return kdInfo.KernelDebuggerEnabled;
+}
 
-		dwSize = 0;
-		lRet = RegQueryValueExW(hKey, RegStartOptionsValue, NULL, NULL, (LPBYTE)NULL, &dwSize);
-		if (lRet != ERROR_SUCCESS)
-			break;
+/*
+* kdReadSystemMemoryEx
+*
+* Purpose:
+*
+* Wrapper around SysDbgReadVirtual request to the KLDBGDRV
+*
+*/
+_Success_(return == TRUE)
+BOOL kdReadSystemMemoryEx(
+    _In_ ULONG_PTR Address,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG BufferSize,
+    _Out_opt_ PULONG NumberOfBytesRead
+)
+{
+    BOOL           bResult = FALSE;
+    DWORD          bytesIO = 0;
+    KLDBG          kldbg;
+    SYSDBG_VIRTUAL dbgRequest;
 
-		memIO = dwSize + sizeof(WCHAR);
-		lpszBootOptions = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, memIO);
-		if (lpszBootOptions == NULL)
-			break;
+    if (NumberOfBytesRead)
+        *NumberOfBytesRead = 0;
 
-		lRet = RegQueryValueExW(hKey, RegStartOptionsValue, NULL, NULL, (LPBYTE)lpszBootOptions, &dwSize);
-		if (lRet != ERROR_SUCCESS)
-			break;
+    if (g_kdctx.hDevice == NULL)
+        return FALSE;
 
-		if (_strstri(lpszBootOptions, L"DEBUG") != NULL)
-			bResult = TRUE;
+    if ((Buffer == NULL) || (BufferSize == 0))
+        return FALSE;
 
-		RegCloseKey(hKey);
-		HeapFree(GetProcessHeap(), 0, lpszBootOptions);
+    if (Address < g_kdctx.SystemRangeStart)
+        return FALSE;
 
-	} while (cond);
+    // fill parameters for KdSystemDebugControl
+    dbgRequest.Address = (PVOID)Address;
+    dbgRequest.Buffer = Buffer;
+    dbgRequest.Request = BufferSize;
 
-	return bResult;
+    // fill parameters for kldbgdrv ioctl
+    kldbg.SysDbgRequest = SysDbgReadVirtual;
+    kldbg.OutputBuffer = &dbgRequest;
+    kldbg.OutputBufferSize = sizeof(SYSDBG_VIRTUAL);
+
+    bResult = DeviceIoControl(g_kdctx.hDevice, IOCTL_KD_PASS_THROUGH, &kldbg,
+        sizeof(kldbg), &dbgRequest, sizeof(dbgRequest), &bytesIO, NULL);
+
+    if (NumberOfBytesRead)
+        *NumberOfBytesRead = bytesIO;
+
+    return bResult;
 }
 
 /*
@@ -1352,40 +1370,16 @@ BOOL kdIsDebugBoot(
 *
 * Purpose:
 *
-* Wrapper around SysDbgReadVirtual request to the KLDBGDRV
+* Wrapper around kdReadSystemMemoryEx
 *
 */
 BOOL kdReadSystemMemory(
-	_In_ ULONG_PTR Address,
-	_Inout_ PVOID Buffer,
-	_In_ ULONG BufferSize
-	)
+    _In_ ULONG_PTR Address,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG BufferSize
+)
 {
-	DWORD          bytesIO = 0;
-	KLDBG          kldbg;
-	SYSDBG_VIRTUAL dbgRequest;
-
-	if (g_kdctx.hDevice == NULL)
-		return FALSE;
-
-	if ((Buffer == NULL) || (BufferSize == 0))
-		return FALSE;
-
-	if (Address < g_kdctx.SystemRangeStart)
-		return FALSE;
-
-	// fill parameters for KdSystemDebugControl
-	dbgRequest.Address = (PVOID)Address;
-	dbgRequest.Buffer = Buffer;
-	dbgRequest.Request = BufferSize;
-
-	// fill parameters for kldbgdrv ioctl
-	kldbg.SysDbgRequest = SysDbgReadVirtual;
-	kldbg.OutputBuffer = &dbgRequest;
-	kldbg.OutputBufferSize = sizeof(SYSDBG_VIRTUAL);
-
-	return DeviceIoControl(g_kdctx.hDevice, IOCTL_KD_PASS_THROUGH, &kldbg,
-		sizeof(kldbg), &dbgRequest, sizeof(dbgRequest), &bytesIO, NULL);
+    return kdReadSystemMemoryEx(Address, Buffer, BufferSize, NULL);
 }
 
 /*
@@ -1397,36 +1391,36 @@ BOOL kdReadSystemMemory(
 *
 */
 BOOL kdExtractDriver(
-	LPCTSTR lpExtractTo,
-	LPCTSTR lpName,
-	LPCTSTR lpType
-	)
+    _In_ LPCWSTR lpExtractTo,
+    _In_ LPCWSTR lpName,
+    _In_ LPCWSTR lpType
+)
 {
-	HRSRC   hResInfo = NULL;
-	HGLOBAL hResData = NULL;
-	PVOID   pData;
-	BOOL    bResult = FALSE;
-	DWORD   dwSize = 0;
-	HANDLE  hFile = INVALID_HANDLE_VALUE;
+    HRSRC   hResInfo = NULL;
+    HGLOBAL hResData = NULL;
+    PVOID   pData;
+    BOOL    bResult = FALSE;
+    DWORD   dwSize = 0;
+    HANDLE  hFile = INVALID_HANDLE_VALUE;
 
-	hResInfo = FindResource(g_hInstance, lpName, lpType);
-	if (hResInfo == NULL) return bResult;
+    hResInfo = FindResource(g_WinObj.hInstance, lpName, lpType);
+    if (hResInfo == NULL) return bResult;
 
-	dwSize = SizeofResource(g_hInstance, hResInfo);
-	if (dwSize == 0) return bResult;
+    dwSize = SizeofResource(g_WinObj.hInstance, hResInfo);
+    if (dwSize == 0) return bResult;
 
-	hResData = LoadResource(g_hInstance, hResInfo);
-	if (hResData == NULL) return bResult;
+    hResData = LoadResource(g_WinObj.hInstance, hResInfo);
+    if (hResData == NULL) return bResult;
 
-	pData = LockResource(hResData);
-	if (pData) {
-		hFile = CreateFile(lpExtractTo, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
-		if (hFile != INVALID_HANDLE_VALUE) {
-			bResult = WriteFile(hFile, pData, dwSize, &dwSize, NULL);
-			CloseHandle(hFile);
-		}
-	}
-	return bResult;
+    pData = LockResource(hResData);
+    if (pData) {
+        hFile = CreateFile(lpExtractTo, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            bResult = WriteFile(hFile, pData, dwSize, &dwSize, NULL);
+            CloseHandle(hFile);
+        }
+    }
+    return bResult;
 }
 
 /*
@@ -1435,104 +1429,100 @@ BOOL kdExtractDriver(
 * Purpose:
 *
 * Thread worker subroutine.
-* Finds MmSystemRangeStart once during program startup.
 *
 */
 VOID pkdQuerySystemInformation(
-	_In_ LPVOID lpParameter
-	)
+    _In_ LPVOID lpParameter
+)
 {
-	BOOL                      cond = FALSE;
-	ULONG                     rl = 0;
-	PKLDBGCONTEXT             Context = (PKLDBGCONTEXT)lpParameter;
-	PVOID                     MappedKernel = NULL;
-	ULONG_PTR                 KernelBase = 0L;
-	PRTL_PROCESS_MODULES      miSpace = NULL;
-	CHAR                      KernelFullPathName[MAX_PATH * 2];
-	ULONG                     ModuleSize;
-	PLIST_ENTRY               Head, Next;
-	PLDR_DATA_TABLE_ENTRY     Entry;
+    BOOL                    cond = FALSE;
+    ULONG                   ModuleSize;
+    PVOID                   MappedKernel = NULL;
+    PKLDBGCONTEXT           Context = (PKLDBGCONTEXT)lpParameter;
+    PIMAGE_NT_HEADERS       NtHeaders;
+    PRTL_PROCESS_MODULES    miSpace = NULL;
+    WCHAR                   NtOskrnlFullPathName[MAX_PATH * 2];
 
-	do {
+    do {
 
-		miSpace = supGetSystemInfo(SystemModuleInformation);
-		if (miSpace == NULL) {
-			break;
-		}
+        miSpace = supGetSystemInfo(SystemModuleInformation);
+        if (miSpace == NULL)
+            break;
 
-		if (miSpace->NumberOfModules == 0) {
-			break;
-		}
+        if (miSpace->NumberOfModules == 0)
+            break;
 
-		rl = GetSystemDirectoryA(KernelFullPathName, MAX_PATH);
-		if (rl == 0) {
-			break;
-		}
+        Context->NtOsBase = miSpace->Modules[0].ImageBase; //loaded kernel base
+        Context->NtOsSize = miSpace->Modules[0].ImageSize; //loaded kernel size
 
-		KernelFullPathName[rl] = (CHAR)'\\';
-		_strcpy_a(&KernelFullPathName[rl + 1],
-			(const char*)&miSpace->Modules[0].FullPathName[miSpace->Modules[0].OffsetToFileName]);
-		KernelBase = (ULONG_PTR)miSpace->Modules[0].ImageBase;
-		HeapFree(GetProcessHeap(), 0, miSpace);
-		miSpace = NULL;
+        _strcpy(NtOskrnlFullPathName, g_WinObj.szSystemDirectory);
+        _strcat(NtOskrnlFullPathName, TEXT("\\"));
+        MultiByteToWideChar(CP_ACP, 0,
+            (LPCSTR)&miSpace->Modules[0].FullPathName[miSpace->Modules[0].OffsetToFileName],
+            -1, _strend(NtOskrnlFullPathName), MAX_PATH);
 
-		MappedKernel = LoadLibraryExA(KernelFullPathName, NULL, DONT_RESOLVE_DLL_REFERENCES);
-		if (MappedKernel == NULL) {
-			break;
-		}
+        supHeapFree(miSpace);
+        miSpace = NULL;
 
-		//find sizeof ntoskrnl image
-		ModuleSize = 0;
-		EnterCriticalSection((PRTL_CRITICAL_SECTION)NtCurrentPeb()->LoaderLock);
-		Head = &NtCurrentPeb()->Ldr->InLoadOrderModuleList;
-		Next = Head->Flink;
+        MappedKernel = LoadLibraryEx(NtOskrnlFullPathName, NULL, DONT_RESOLVE_DLL_REFERENCES);
+        if (MappedKernel == NULL)
+            break;
 
-		while (Next != Head) {
-			Entry = CONTAINING_RECORD(Next, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-			if (Entry->DllBase == (PVOID)MappedKernel) {
-				ModuleSize = (ULONG)Entry->SizeOfImage;
-				break;
-			}
-			Next = Next->Flink;
-		}
-		LeaveCriticalSection((PRTL_CRITICAL_SECTION)NtCurrentPeb()->LoaderLock);
+        //find and remember ObHeaderCookie
+        if (g_WinObj.osver.dwMajorVersion >= 10) {
+            
+            Context->ObHeaderCookie = ObFindHeaderCookie(Context, 
+                (ULONG_PTR)MappedKernel, 
+                (ULONG_PTR)Context->NtOsBase);
+        
+        }
 
-		//query MmSystemRangeStart value
-		Context->SystemRangeStart = ObQuerySystemRangeStartValue((ULONG_PTR)MappedKernel, KernelBase);
-		if (Context->SystemRangeStart == 0) {		
-			if (Context->osver.dwBuildNumber < 9200) {
-				Context->SystemRangeStart = MM_SYSTEM_RANGE_START_7;
-			}
-			else {
-				Context->SystemRangeStart = MM_SYSTEM_RANGE_START_8;
-			}
-		}
+        NtHeaders = RtlImageNtHeader(MappedKernel);
+        if (NtHeaders) {
+            ModuleSize = NtHeaders->OptionalHeader.SizeOfImage;
+            if (ModuleSize != 0) {
 
-		//find and remember ObHeaderCookie
-		if (Context->osver.dwMajorVersion >= 10) {
-			Context->ObHeaderCookie = ObFindHeaderCookie(Context, (ULONG_PTR)MappedKernel, KernelBase);
-		}
-		//find namespace table
-		Context->ObpPrivateNamespaceLookupTable = ObFindObpPrivateNamespaceLookupTable(Context, (ULONG_PTR)MappedKernel, ModuleSize, KernelBase);
+                //find KiServiceTable
+                kdFindKiServiceTable((ULONG_PTR)MappedKernel, 
+                    (ULONG_PTR)Context->NtOsBase, 
+                    &Context->KiServiceTableAddress, 
+                    &Context->KiServiceLimit);
 
-		//find KiServiceTable
-		kdFindKiServiceTable((ULONG_PTR)MappedKernel, ModuleSize, KernelBase, &Context->KiServiceTableAddress, &Context->KiServiceLimit);
+                //find namespace table
+                if (g_WinObj.osver.dwBuildNumber <= 10240) {
+                    Context->ObpPrivateNamespaceLookupTable = ObFindObpPrivateNamespaceLookupTable( 
+                        (ULONG_PTR)MappedKernel, 
+                        ModuleSize, 
+                        (ULONG_PTR)Context->NtOsBase);
+                }
+            }
+        }
 
+    } while (cond);
 
-#ifdef _DEBUG
-//		RtlSecureZeroMemory(&KernelFullPathName, sizeof(KernelFullPathName));
-//		u64tohex_a((ULONG_PTR)Context->ObpPrivateNamespaceLookupTable, KernelFullPathName);
-//		OutputDebugStringA(KernelFullPathName);
-#endif
+    if (MappedKernel != NULL) {
+        FreeLibrary(MappedKernel);
+    }
+    if (miSpace != NULL) {
+        supHeapFree(miSpace);
+    }
+}
 
-	} while (cond);
-
-	if (MappedKernel != NULL) {
-		FreeLibrary(MappedKernel);
-	}
-	if (miSpace != NULL) {
-		HeapFree(GetProcessHeap(), 0, miSpace);
-	}
+/*
+* kdAddressInNtOsImage
+*
+* Purpose:
+*
+* Test if given address in range of ntoskrnl.
+*
+*/
+BOOL kdAddressInNtOsImage(
+    _In_ PVOID Address
+)
+{
+    return IN_REGION(Address, 
+        g_kdctx.NtOsBase, 
+        g_kdctx.NtOsSize);
 }
 
 /*
@@ -1546,25 +1536,25 @@ VOID pkdQuerySystemInformation(
 *
 */
 DWORD WINAPI kdQueryProc(
-	_In_  LPVOID lpParameter
-	)
+    _In_ LPVOID lpParameter
+)
 {
-	BOOL            bResult = FALSE;
-	PKLDBGCONTEXT   Context = (PKLDBGCONTEXT)lpParameter;
-	
-	//validate pointer
-	if (Context == NULL) {
-		return FALSE;
-	}
+    BOOL            bResult = FALSE;
+    PKLDBGCONTEXT   Context = (PKLDBGCONTEXT)lpParameter;
 
-	//check if this is initial call
-	if (Context->SystemRangeStart == 0) {
-		pkdQuerySystemInformation(Context);
-	}
+    //validate pointer
+    if (Context == NULL) {
+        return FALSE;
+    }
 
-	//magic dump
-	bResult = ObListCreate(&Context->ObjectList, FALSE);
-	return bResult;
+    //check if this is initial call
+    if (Context->KiServiceTableAddress == 0) {
+        pkdQuerySystemInformation(Context);
+    }
+
+    //magic dump
+    bResult = ObListCreate(&Context->ObjectList, FALSE);
+    return bResult;
 }
 
 /*
@@ -1574,70 +1564,76 @@ DWORD WINAPI kdQueryProc(
 *
 * Enable Debug Privilege and open/load KLDBGDRV driver
 *
-* If there is no DEBUG mode OS flag or OS version is below than Windows 7 
-* this routine only query windows version to the global context variable.
-*
 */
 VOID kdInit(
-	BOOL IsFullAdmin
-	)
+    BOOL IsFullAdmin
+)
 {
-	WCHAR szDrvPath[MAX_PATH * 2];
+    WCHAR szDrvPath[MAX_PATH * 2];
 
-	RtlSecureZeroMemory(&g_kdctx, sizeof(g_kdctx));
+    RtlSecureZeroMemory(&g_kdctx, sizeof(g_kdctx));
 
-	//
-	// Minimum supported client is windows 7
-	// Query version info in global context and  
-	// if version below Win7 - leave
-	//
-	g_kdctx.osver.dwOSVersionInfoSize = sizeof(g_kdctx.osver);
-	RtlGetVersion(&g_kdctx.osver);
-	if (
-		(g_kdctx.osver.dwMajorVersion < 6) || //any lower other vista
-		((g_kdctx.osver.dwMajorVersion == 6) && (g_kdctx.osver.dwMinorVersion == 0))//vista
-		)
-	{
-		return;
-	}
+    //
+    // Minimum supported client is windows 7
+    // Query system range start value and if version below Win7 - leave
+    //
+    if (
+        (g_WinObj.osver.dwMajorVersion < 6) || //any lower other vista
+        ((g_WinObj.osver.dwMajorVersion == 6) && (g_WinObj.osver.dwMinorVersion == 0))//vista
+        )
+    {
+        return;
+    }
 
-	ObGetDirectoryObjectAddress(NULL, &g_kdctx.DirectoryRootAddress, &g_kdctx.DirectoryTypeIndex);
+    ObGetDirectoryObjectAddress(NULL, &g_kdctx.DirectoryRootAddress, &g_kdctx.DirectoryTypeIndex);
+    g_kdctx.SystemRangeStart = supQuerySystemRangeStart();
+    if (g_kdctx.SystemRangeStart == 0) {
+        if (g_WinObj.osver.dwBuildNumber < 9200) {
+            g_kdctx.SystemRangeStart = MM_SYSTEM_RANGE_START_7;
+        }
+        else {
+            g_kdctx.SystemRangeStart = MM_SYSTEM_RANGE_START_8;
+        }
+    }
 
-	// no admin rights, leave
-	if (IsFullAdmin == FALSE)
-		return;
+    // no admin rights, leave
+    if (IsFullAdmin == FALSE)
+        return;
 
-	// check if system booted in the debug mode
-	if (kdIsDebugBoot() == FALSE) 
-		return;
 
-	// test privilege assigned and continue to load/open kldbg driver
-	if (supEnablePrivilege(SE_DEBUG_PRIVILEGE, TRUE)) {
+#ifndef _USE_OWN_DRIVER
+    // check if system booted in the debug mode
+    if (kdIsDebugBoot() == FALSE)
+        return;
+#endif
 
-		// try to open existing
-		if (scmOpenDevice(KLDBGDRV, &g_kdctx.hDevice) == FALSE) {
+    // test privilege assigned and continue to load/open kldbg driver
+    if (supEnablePrivilege(SE_DEBUG_PRIVILEGE, TRUE)) {
 
-			// no such device exist, construct filepath and check if driver already present
-			RtlSecureZeroMemory(szDrvPath, sizeof(szDrvPath));
-			if (GetSystemDirectory(szDrvPath, MAX_PATH)) {
-				_strcat(szDrvPath, KLDBGDRVSYS);
+        // try to open existing
+        if (scmOpenDevice(KLDBGDRV, &g_kdctx.hDevice) == FALSE) {
 
-				// if no file exists, extract it to the drivers directory
-				if (!PathFileExists(szDrvPath)) {
-					kdExtractDriver(szDrvPath, MAKEINTRESOURCE(IDR_KDBGDRV), L"SYS");
-				}
-				// load service driver and open handle for it
-				g_kdctx.IsOurLoad = scmLoadDeviceDriver(KLDBGDRV, szDrvPath, &g_kdctx.hDevice);
-			}
-		}
-	}
+            // no such device exist, construct filepath and check if driver already present
+            RtlSecureZeroMemory(szDrvPath, sizeof(szDrvPath));
+            _strcpy(szDrvPath, g_WinObj.szSystemDirectory);
+            _strcat(szDrvPath, KLDBGDRVSYS);
 
-	//query global variable and dump object directory if driver support available.
-	if (g_kdctx.hDevice != NULL) {
-		InitializeCriticalSection(&g_kdctx.ListLock);
-		g_kdctx.hThreadWorker = CreateThread(NULL, 0, kdQueryProc, &g_kdctx, 0, NULL);
-		g_kdctx.IopInvalidDeviceRequest = kdQueryIopInvalidDeviceRequest();
-	}
+            // if no file exists, extract it to the drivers directory
+            if (!PathFileExists(szDrvPath)) {
+                kdExtractDriver(szDrvPath, MAKEINTRESOURCE(IDR_KDBGDRV), L"SYS");
+            }
+            // load service driver and open handle for it
+            g_kdctx.IsOurLoad = scmLoadDeviceDriver(KLDBGDRV, szDrvPath, &g_kdctx.hDevice);
+        }
+
+    }
+
+    //query global variable and dump object directory if driver support available.
+    if (g_kdctx.hDevice != NULL) {
+        RtlInitializeCriticalSection(&g_kdctx.ListLock);
+        g_kdctx.hThreadWorker = CreateThread(NULL, 0, kdQueryProc, &g_kdctx, 0, NULL);
+        g_kdctx.IopInvalidDeviceRequest = kdQueryIopInvalidDeviceRequest();
+    }
 }
 
 /*
@@ -1651,36 +1647,39 @@ VOID kdInit(
 *
 */
 VOID kdShutdown(
-	VOID
-	)
+    VOID
+)
 {
-	WCHAR szDrvPath[MAX_PATH];
+    WCHAR szDrvPath[MAX_PATH];
 
-	DeleteCriticalSection(&g_kdctx.ListLock);
+    RtlDeleteCriticalSection(&g_kdctx.ListLock);
 
-	if (g_kdctx.hDevice == NULL)
-		return;
+    if (g_kdctx.hDevice == NULL)
+        return;
 
-	if (g_kdctx.hThreadWorker) {
-		//give it a last chance to complete, elsewhere we don't care.
-		WaitForSingleObject(g_kdctx.hThreadWorker, 1000);
-		CloseHandle(g_kdctx.hThreadWorker);
-		g_kdctx.hThreadWorker = NULL;
-	}
+    if (g_kdctx.hThreadWorker) {
+        //give it a last chance to complete, elsewhere we don't care.
+        WaitForSingleObject(g_kdctx.hThreadWorker, 1000);
+        CloseHandle(g_kdctx.hThreadWorker);
+        g_kdctx.hThreadWorker = NULL;
+    }
 
-	CloseHandle(g_kdctx.hDevice);
-	g_kdctx.hDevice = NULL;
+    CloseHandle(g_kdctx.hDevice);
+    g_kdctx.hDevice = NULL;
 
-	ObListDestroy(&g_kdctx.ObjectList);
+    ObListDestroy(&g_kdctx.ObjectList);
 
-	// driver was loaded, unload it
-	// windbg recreates service and drops file everytime when kernel debug starts
-	if (g_kdctx.IsOurLoad) {
-		scmUnloadDeviceDriver(KLDBGDRV);
-		// driver file is no longer needed
-		RtlSecureZeroMemory(&szDrvPath, sizeof(szDrvPath));
-		_strcpy(szDrvPath, L"\\\\?\\globalroot\\systemroot\\system32");
-		_strcat(szDrvPath, KLDBGDRVSYS);	
-		DeleteFile(szDrvPath);
-	}
+    //
+    // Driver was loaded, unload it.
+    // Windbg recreates service and drops file everytime when kernel debug starts.
+    // Windbg behavior untested in win10.
+    //
+    if (g_kdctx.IsOurLoad) {
+        scmUnloadDeviceDriver(KLDBGDRV);
+        // driver file is no longer needed
+        RtlSecureZeroMemory(&szDrvPath, sizeof(szDrvPath));
+        _strcpy(szDrvPath, g_WinObj.szSystemDirectory);
+        _strcat(szDrvPath, KLDBGDRVSYS);
+        DeleteFile(szDrvPath);
+    }
 }
